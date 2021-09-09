@@ -1,0 +1,150 @@
+For the following questions, the parameters of your car are as follows:
+● Length: l
+● Width: w
+● Wheel base: b
+● Track width: d
+● Obstacle safety margin: m
+
+define dl = (l-b)/2
+define dw = (w-d)/2
+
+Assume that the distance from the rear axle to the rear end of the car is the 
+same as the distance from the front axle of the car to the front end of the car. 
+The car is symmetric laterally. Observations are made in the base_link frame of 
+the car, which is coincident with the center of the rear axle of the car. 
+The car is turning along an arc of radius r, and observes a point p=(x,y).
+
+1. Which point of the car traces an arc of maximum radius? What is that radius, 
+in terms of r and other car parameters?
+
+Outer front
+r_max = r_of = ((r+w/2)^2 + (l- dl)^2)^.5 
+
+
+2. Which point of the car traces an arc of minimum radius? What is that radius, 
+in terms of r and other car parameters?
+
+Inner back
+r_min = r_ib = ((r-w/2)^2 + (-dl)^2)^.5 
+
+
+Note radius of inner front
+r_if = ((r-w/2)^2 + (l-dl)^2)^.5 
+
+Radius of outer back
+r_ob = ((r+w/2)^2 + (-dl)^2)^0.5
+
+Radius of p from steering center
+r_p = ((r-y)^2 + (x)^2)^.5 
+
+3. Under what conditions will p first hit the inner side (the side closer to the 
+center of turning) of the car as the car drives forward?
+
+    It will hit the inner side if p is inside the arc traced by the inner-front 
+    corner of the car and outside the arc traced by the inner-rear corner of the car.
+    
+    r_ib <= r_p <= r_if
+
+
+4. Under what conditions will p first hit the front of the car as the car drives 
+forward?
+
+    It will hit the front side if p is outside the arc traced by the inner-front 
+    corner of the car and inside the arc traced by the outer-front corner of the car.
+    
+    r_if <= r_p <= r_of
+
+
+
+5. Under what conditions will p first hit the outer side (the side farther to 
+the center of turning) of the car as the car drives forward?
+
+    It will hit the outer side if p won't hit the inner side and front side as well as 
+    if p is outside the arc traced by the inner-back corner of the car and inside the 
+    arc traced by the outer-back corner of the car.
+    r_ib <= r_p <= r_ob and not going to hit the front or inner-side
+
+6. What is the maximum distance (the free path length) the car can move forward 
+along the arc before it hits the point p?
+
+Note that r is non-negative
+
+if point will hit front side:
+let z = 1 when we turn left and z = -1 we when turn right
+
+
+let c be the point where the car collides with p, relative to the car.
+c = (l-dl, q)
+
+Find q:
+    r_p^2 = (r-z*q)^2 + (l-dl)^2
+    (r-zq)^2 = r_p^2 - (l-dl)^2
+    r-zq = (r_p^2 - (l-dl)^2)^(1/2)
+    q = z(r - (r_p^2 - (l-dl)^2)^(1/2))
+
+Now define c and p relative to the center of the curve that we are driving on
+c' = c - (0, z*r) = (l-dl, q) - (0, z*r) = (l-dl, q-z*r)
+p' = p - (0, z*r) = (x, y) - (0, z*r) = (x, y-z*r)
+
+Now find angle between c' and p':
+    cos(theta) = (<c',p'>)/(norm(c') * norm(p'))
+    theta = acos((<c',p'>)/(norm(c') * norm(p'))) # check return value of acos, should be [0, PI]
+
+Now find free path length:
+    fpl = 2PIr * theta/2PI = r * theta
+
+
+else if point will hit inner side: 
+let z = 1 when we turn left and z = -1 we when turn right
+
+let c be the point where the car collides with p, relative to the car.
+c = (q, z*w/2) 
+Find q:
+    r_p^2 = q^2 + (r - w/2)^2
+    q^2 = r_p^2 - (r - w/2)^2
+    q = (r_p^2 - (r - w/2)^2)^(1/2)
+
+Now define c and p relative to the center of the curve that we are driving on
+c' = c - (0, z*r) = (q, z*w/2) - (0, z*r) = (q, z*w/2 -z*r) = (q, z(w/2 - r))
+p' = p - (0, z*r) = (x, y) - (0, z*r) = (x, y-z*r)
+
+Now find angle between c' and p':
+    cos(theta) = (<c',p'>)/(norm(c') * norm(p'))
+    theta = acos((<c',p'>)/(norm(c') * norm(p'))) # check return value of acos, should be [0, PI]
+
+Now find free path length:
+    fpl = 2PIr * theta/2PI = r * theta
+
+
+else if point will hit outer side: 
+let z = 1 when we turn left and z = -1 we when turn right
+
+let c be the point where the car collides with p, relative to the car.
+c = (q, -z*w/2) 
+Find q:
+    r_p^2 = q^2 + (r + w/2)^2
+    q^2 = r_p^2 - (r + w/2)^2
+    q = (r_p^2 - (r + w/2)^2)^(1/2)
+
+Now define c and p relative to the center of the curve that we are driving on
+c' = c - (0, z*r) = (q, -z*w/2) - (0, z*r) = (q, -z*w/2 -z*r) = (q, -z(w/2 + r))
+p' = p - (0, z*r) = (x, y) - (0, z*r) = (x, y-z*r)
+
+Now find angle between c' and p':
+    cos(theta) = (<c',p'>)/(norm(c') * norm(p'))
+    theta = acos((<c',p'>)/(norm(c') * norm(p'))) # check return value of acos, should be [0, PI]
+
+Now find free path length:
+    fpl = 2PIr * theta/2PI = r * theta
+
+
+
+
+7. If the current velocity of the car is v, and the maximum magnitude of 
+deceleration is a, what is the minimum stopping distance of the car? 
+[This will determine which curvature options should be ruled out, 
+depending on their free path lengths]
+
+    stopping_distance = (v^2)/(2*a)
+
+
