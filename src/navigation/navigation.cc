@@ -42,6 +42,9 @@ using std::vector;
 using namespace math_util;
 using namespace ros_helpers;
 
+// Create command line arguments
+DEFINE_double(p1_local_coords, 10.0, "The goal for P1");
+
 namespace {
 ros::Publisher drive_pub_;
 ros::Publisher viz_pub_;
@@ -116,10 +119,22 @@ void Navigation::Run() {
   // If odometry has not been initialized, we can't do anything.
   if (!odom_initialized_) return;
 
+
+  // Draw goal point p1
+  visualization::DrawCross(Vector2f(FLAGS_p1_local_coords, 0), .5, 0x39B81D, local_viz_msg_);
+
   // The control iteration goes here. 
   // Feel free to make helper functions to structure the control appropriately.
   
   // The latest observed point cloud is accessible via "point_cloud_"
+
+  static Vector2f zero = Vector2f(0., 0.);
+
+  for (uint i = 0; i < point_cloud_.size(); i += 100) {
+    auto point = point_cloud_[i];
+    visualization::DrawLine(zero, point, 0xDE0000, local_viz_msg_);
+  }
+
 
   // Eventually, you will have to set the control values to issue drive commands:
   drive_msg_.curvature = 0;
