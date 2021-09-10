@@ -43,7 +43,16 @@ using namespace math_util;
 using namespace ros_helpers;
 
 // Create command line arguments
-DEFINE_double(p1_local_coords, 10.0, "The goal for P1");
+DEFINE_double(p1_local_coords, 10., "The goal for P1");
+DEFINE_double(max_acceleration, 4., "The max acceleration");
+DEFINE_double(max_deceleration, 4., "The max deceleration");
+DEFINE_double(max_speed, 1., "The max speed");
+
+DEFINE_double(length, .5, "The wheel base of the robot");
+DEFINE_double(width, .2, "The track width of the robot");
+DEFINE_double(del_length, .1, "The length margin of the robot");
+DEFINE_double(del_width, .1, "The width margin of the robot");
+// DEFINE_double(safety_margin, .15, "The safety margin for the robot");
 
 namespace {
 ros::Publisher drive_pub_;
@@ -109,6 +118,103 @@ void Navigation::ObservePointCloud(const vector<Vector2f>& cloud,
   point_cloud_ = cloud;                                     
 }
 
+
+// Existance
+bool is_inner_collision(double radius_pt, double radius_inner_back, double radius_inner_front) {
+  return (radius_pt > radius_inner_back && radius_pt < radius_inner_front);
+}
+
+bool is_front_collision(double radius_pt, double radius_inner_front, double radius_outer_front) {
+  return (radius_pt > radius_inner_front && radius_pt < radius_outer_front);
+}
+
+bool is_outer_collision(double radius_pt, double radius_outer_front, double radius_outer_back) {
+  // TODO: Fix this
+  return false; //(radius_pt > radius_outer_front && radius_pt < radius_outer_back);
+}
+
+bool is_straight_collision(Vector2f pt) {
+  return (abs(pt[0]) <= FLAGS_width/2 + FLAGS_del_width);
+}
+
+// Distance to collision
+double dist_to_collision_inner(double radius_car, int side, double radius_pt, Vector2f pt) {
+  double theta_car = acos(-side * (FLAGS_width/2 + FLAGS_del_width) / radius_pt);
+  double theta_point = atan2(pt[0], radius_car - side*pt[1]);
+  return (theta_point - theta_car) * radius_car;
+}
+
+double dist_to_collision_front(double radius_car, int side, double radius_pt, Vector2f pt) {
+  double theta_car = asin((FLAGS_length + FLAGS_del_length) / radius_pt);
+  double theta_point = atan2(pt[0], radius_car - side*pt[1]);
+  return (theta_point - theta_car) * radius_car;
+}
+
+double dist_to_collision_outer(double radius_car, int side, double radius_pt, Vector2f pt) {
+  double theta_car = acos(side * (FLAGS_width/2 + FLAGS_del_width) / radius_pt);
+  double theta_point = atan2(pt[0], radius_car + side*pt[1]);
+  return (theta_point - theta_car) * radius_car;
+}
+
+
+// big boi
+double distance_to_collision(double curvature, Vector2f pt) {
+
+  double radius_car = 1/abs(curvature);
+  int side = (2*(curvature>0) - 1) * (curvature != 0);
+  double radius_pt = (pt-Vector2f(0.,radius_car)).norm();
+
+  double radius_left_back = sqrt(pow(radius_car - side*(FLAGS_width/2. + FLAGS_del_width), 2) + pow(FLAGS_del_length, 2));
+  double radius_right_back = sqrt(pow(radius_car + side*(FLAGS_width/2. + FLAGS_del_width), 2) + pow(FLAGS_del_length, 2));
+  double radius_left_front = sqrt(pow(radius_car - side*(FLAGS_width/2. + FLAGS_del_width), 2) + pow(FLAGS_length + FLAGS_del_length, 2));
+  double radius_right_front = sqrt(pow(radius_car + side*(FLAGS_width/2. + FLAGS_del_width), 2) + pow(FLAGS_length + FLAGS_del_length, 2));
+
+
+  if (side == 0) {
+    // Straight
+    if (is_straight_collision(pt)) {
+      return pt[0] - (FLAGS_length + FLAGS_del_length);
+    }
+    return -1;
+  } else {
+    double radius_inner_back;
+    double radius_inner_front;
+    double radius_outer_back;
+    double radius_outer_front;
+
+    if (side == 1) {
+      // Left
+      radius_inner_back = radius_left_back;
+      radius_inner_front = radius_left_front;
+      radius_outer_back = radius_right_back;
+      radius_outer_front = radius_right_front;
+    } else { // (side == -1)
+      // Right
+      radius_inner_back = radius_right_back;
+      radius_inner_front = radius_right_front;
+      radius_outer_back = radius_left_back;
+      radius_outer_front = radius_left_front;
+    }
+
+    printf("Radii: %.3f, %.3f, %.3f\n", radius_pt, radius_inner_front, radius_outer_front);
+
+    if (is_inner_collision(radius_pt, radius_inner_back, radius_inner_front)) {
+      printf("Inner collision\n");
+      return dist_to_collision_inner(radius_car, side, radius_pt, pt);
+    } else if (is_front_collision(radius_pt, radius_inner_front, radius_outer_front)) {
+      printf("Front collision\n");
+      return dist_to_collision_front(radius_car, side, radius_pt, pt);
+    } else if (is_outer_collision(radius_pt, radius_outer_front, radius_outer_back)) {
+      return dist_to_collision_outer(radius_car, side, radius_pt, pt);
+    } else {
+      return -1;
+    }
+  }
+}
+
+
+
+
 void Navigation::Run() {
   // This function gets called 20 times a second to form the control loop.
   
@@ -119,9 +225,9 @@ void Navigation::Run() {
   // If odometry has not been initialized, we can't do anything.
   if (!odom_initialized_) return;
 
-
   // Draw goal point p1
-  visualization::DrawCross(Vector2f(FLAGS_p1_local_coords, 0), .5, 0x39B81D, local_viz_msg_);
+  const Vector2f goal_point = Vector2f(FLAGS_p1_local_coords-(odom_start_loc_-odom_loc_).norm(), 0);
+  visualization::DrawCross(goal_point, .5, 0x39B81D, local_viz_msg_);
 
   // The control iteration goes here. 
   // Feel free to make helper functions to structure the control appropriately.
@@ -135,10 +241,27 @@ void Navigation::Run() {
     visualization::DrawLine(zero, point, 0xDE0000, local_viz_msg_);
   }
 
+  // TODO: Sample n curvatures
 
-  // Eventually, you will have to set the control values to issue drive commands:
-  drive_msg_.curvature = 0;
-  drive_msg_.velocity = 1;
+  // TODO: Select the "best" curvature
+  double curvature = .1;
+  std::cout << distance_to_collision(curvature, goal_point) << "\n";
+
+  drive_msg_.curvature = curvature;
+
+  // TOC for selected_curvature
+  double remaining_distance = goal_point.x() + goal_point.y();
+
+  if (pow(robot_vel_.norm(), 2)/(2*FLAGS_max_deceleration) > remaining_distance) {
+    // We need to stop
+    drive_msg_.velocity = 0;
+  } else {
+    // Go max speed
+    drive_msg_.velocity = FLAGS_max_speed;
+  }
+
+  // drive_msg_.curvature = 0.;
+  // drive_msg_.velocity = 1.;
 
   // Add timestamps to all messages.
   local_viz_msg_.header.stamp = ros::Time::now();
