@@ -33,6 +33,9 @@
 #include "navigation.h"
 #include "visualization/visualization.h"
 #include "collision.h"
+#include "path.h"
+
+#include <limits>
 
 using Eigen::Vector2f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
@@ -122,8 +125,9 @@ void Navigation::Run() {
   // If odometry has not been initialized, we can't do anything.
   if (!odom_initialized_) return;
 
-  // Draw goal point p1
-  const Vector2f goal_point = Vector2f(FLAGS_p1_local_coords-(odom_start_loc_-odom_loc_).norm(), 0);
+  // Draw goal point p1, relative to car
+  const Vector2f goal_point = Vector2f(FLAGS_p1_local_coords - (odom_start_loc_ - odom_loc_).norm(), 0);
+  // const Vector2f goal_point2 = Vector2f(FLAGS_p1_local_coords, 0) + odom_start_loc_ - odom_loc_;
   visualization::DrawCross(goal_point, .5, 0x39B81D, local_viz_msg_);
 
   // The control iteration goes here. 
@@ -139,10 +143,47 @@ void Navigation::Run() {
   }
 
   // TODO: Sample n curvatures
+  vector<Path> path_options;
+
+  for (float curvature = -1.; curvature <= 1; curvature += .25) {
+    Path path = {};
+    path.curvature = curvature;
+    path_options.push_back(path);
+  }
+
+
+  // Get Metrics on all curves
+  float distance;
+  float free_path_length;
+  Vector2f closest_point;
+  for (auto& path : path_options) {
+    free_path_length = std::numeric_limits<float>::max();
+    closest_point = point_cloud_[0];
+    for (auto& point : point_cloud_) {
+      distance = distance_to_collision(path.curvature, point);
+      if (distance < free_path_length) {
+        free_path_length = distance;
+        closest_point = point;
+      }
+    }
+    path.add_collision_data(free_path_length, closest_point);
+  }
+
 
   // TODO: Select the "best" curvature
-  double curvature = .1;
-  std::cout << distance_to_collision(curvature, goal_point) << "\n";
+  Path best_path = path_options[0];
+  float best_rating = 0.;
+  float rating;
+  for (auto& path : path_options) {
+    rating = path.rate_path1(goal_point);
+    printf("Path %f %f\n", path.curvature, rating);
+    if (rating > best_rating) {
+      best_rating = rating;
+      best_path = path;
+    }
+  }
+  
+  float curvature = best_path.curvature;
 
   drive_msg_.curvature = curvature;
 
