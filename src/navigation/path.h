@@ -11,11 +11,14 @@ using Eigen::Vector2f;
 class Path {
   public:
   float curvature;
+  float radius;
   float clearance;
   float free_path_length;
   Eigen::Vector2f obstruction;
   Eigen::Vector2f closest_point;
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+  
+  Path(float curvature) : curvature(curvature), radius(1/abs(curvature)) {}
 
   float point_to_path_dist(const Vector2f& goal_point) {
     return 0.;

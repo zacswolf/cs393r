@@ -209,7 +209,7 @@ void Navigation::Run() {
   vector<Path> path_options;
 
   for (float curvature = -1.; curvature <= 1; curvature += .25) {
-    Path path = {};
+    Path path = Path(curvature);
     path.curvature = curvature;
     path_options.push_back(path);
   }
@@ -280,6 +280,32 @@ void Navigation::Run() {
     path.add_collision_data(free_path_length, closest_point);
   }
 
+  // Visualize arcs
+  for (auto& path : path_options) {
+    // path.curvature
+    // path.free_path_length
+    if (path.curvature == 0) {
+      visualization::DrawLine(Vector2f(0, 0), Vector2f(path.free_path_length, 0), 0xfca903, local_viz_msg_);
+    } else {
+      int side = (2 * (path.curvature > 0) - 1) * (path.curvature != 0);
+      Eigen::Vector2f center = Vector2f(0, 1/path.curvature);
+      float start_angle;
+      float end_angle;
+      if (side == 1) {
+        start_angle = -M_PI/2;
+        end_angle = start_angle + path.free_path_length * abs(path.curvature);
+      } else {
+        end_angle = M_PI/2;
+        start_angle = end_angle - path.free_path_length * abs(path.curvature);
+      }
+      visualization::DrawArc(center,
+              path.radius,
+              start_angle,
+              end_angle,
+              0xfca903,
+              local_viz_msg_);
+    }
+  }
 
   // TODO: Select the "best" curvature
   Path best_path = path_options[0];
