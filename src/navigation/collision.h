@@ -43,10 +43,7 @@ double dist_to_collision_inner(double radius_car, int side, double radius_pt, Ve
   double theta_car = acos((radius_car - FLAGS_width/2 - FLAGS_del_width) / radius_pt);
   double theta_point = atan2(pt[0], radius_car - side*pt[1]);
   if (theta_point < 0) {
-    theta_point = theta_point + 2*3.14159;
-  }
-  if (theta_point < theta_car) {
-    std::cout << "\n" << "Inner" << "\n";
+    theta_point = theta_point + 2*M_PI;
   }
   return (theta_point - theta_car) * radius_car;
 }
@@ -55,10 +52,7 @@ double dist_to_collision_front(double radius_car, int side, double radius_pt, Ve
   double theta_car = asin((FLAGS_length + FLAGS_del_length) / radius_pt);
   double theta_point = atan2(pt[0], radius_car - side*pt[1]);
   if (theta_point < 0) {
-    theta_point = theta_point + 2*3.14159;
-  }
-  if (theta_point < theta_car) {
-    std::cout << "\n" << side << "\n" << radius_car << "\n" << radius_pt << "\n" << theta_car << "\n" << theta_point << "\n" << pt.transpose() << "\n";
+    theta_point = theta_point + 2*M_PI;
   }
   return (theta_point - theta_car) * radius_car;
 }
@@ -67,10 +61,7 @@ double dist_to_collision_outer(double radius_car, int side, double radius_pt, Ve
   double theta_car = acos((radius_car + FLAGS_width/2 + FLAGS_del_width) / radius_pt);
   double theta_point = atan2(pt[0], radius_car + side*pt[1]);
   if (theta_point < 0) {
-    theta_point = theta_point + 2*3.14159;
-  }
-  if (theta_point < theta_car) {
-    std::cout << "\n" << "Outer" << "\n";
+    theta_point = theta_point + 2*M_PI;
   }
   return (theta_point - theta_car) * radius_car;
 }
@@ -117,10 +108,8 @@ double distance_to_collision(double curvature, Vector2f pt) {
     // printf("Radii: %.3f, %.3f, %.3f\n", radius_pt, radius_inner_front, radius_outer_front);
 
     if (is_inner_collision(radius_pt, radius_inner_back, radius_inner_front)) {
-      //printf("Inner collision\n");
       return dist_to_collision_inner(radius_car, side, radius_pt, pt);
     } else if (is_front_collision(radius_pt, radius_inner_front, radius_outer_front)) {
-      //printf("Front collision\n");
       return dist_to_collision_front(radius_car, side, radius_pt, pt);
     } else if (is_outer_collision(radius_pt, radius_outer_front, radius_outer_back)) {
       return dist_to_collision_outer(radius_car, side, radius_pt, pt);

@@ -163,10 +163,10 @@ void Navigation::Run() {
 
   for(int i=total_latency-1;i>=actuation_latency-1;i--){
 
-    if(previous_vel_(i) > vel_pred){
+    if (previous_vel_(i) > vel_pred) {
       // accelerating
       vel_pred = std::min(std::min(previous_vel_(i),FLAGS_max_speed), vel_pred + FLAGS_max_deceleration/20);
-    }else{
+    } else {
       // decelerating
       vel_pred = std::max(std::max(previous_vel_(i),-FLAGS_max_speed), vel_pred - FLAGS_max_deceleration/20);
     }
@@ -294,9 +294,7 @@ void Navigation::Run() {
     }
   }
   
-  float curvature = best_path.curvature;
-  
-  drive_msg_.curvature = 0;//curvature;
+  drive_msg_.curvature = 0*best_path.curvature;
 
   // TOC for selected_curvature
   double remaining_distance = goal_point.x() + goal_point.y();
