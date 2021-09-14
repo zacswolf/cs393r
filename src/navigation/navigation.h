@@ -87,6 +87,13 @@ class Navigation {
   Eigen::Vector2f nav_goal_loc_;
   // Navigation goal angle.
   float nav_goal_angle_;
+
+  // Previous velocity commands
+  Eigen::Matrix<double,10,1> previous_vel_;
+
+  // Previous curvature commands
+  Eigen::Matrix<double,10,1> previous_curv_;
+
 };
 
 }  // namespace navigation
