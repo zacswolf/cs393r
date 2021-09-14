@@ -33,6 +33,9 @@
 #include "navigation.h"
 #include "visualization/visualization.h"
 #include "collision.h"
+#include "path.h"
+
+#include <limits>
 
 using Eigen::Vector2f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
@@ -126,8 +129,9 @@ void Navigation::Run() {
   // If odometry has not been initialized, we can't do anything.
   if (!odom_initialized_) return;
 
-  // Draw goal point p1
-  const Vector2f goal_point = Vector2f(FLAGS_p1_local_coords-(odom_start_loc_-odom_loc_).norm(), 0);
+  // Draw goal point p1, relative to car
+  const Vector2f goal_point = Vector2f(FLAGS_p1_local_coords - (odom_start_loc_ - odom_loc_).norm(), 0);
+  // const Vector2f goal_point2 = Vector2f(FLAGS_p1_local_coords, 0) + odom_start_loc_ - odom_loc_;
   visualization::DrawCross(goal_point, .5, 0x39B81D, local_viz_msg_);
 
   // The control iteration goes here. 
@@ -202,55 +206,96 @@ void Navigation::Run() {
   //std::cout << "\n\n";
 
   // TODO: Sample n curvatures
-  Eigen::Matrix<double,13,1> curv_set_;
-  Eigen::Matrix<double,13,1> cost_;
-  curv_set_ << -2,-1,-0.5,-0.2,-0.1,-0.05,0.,0.05,0.1,0.2,0.5,1,2;
-  int min_cost_ind = 0;
-  for (int i=0; i<13; i++) {
-    double curv_option = curv_set_(i);
-    double min_dist = 16;
+  vector<Path> path_options;
 
-    for (int j=0; j<((int) point_cloud_.size()); j++){
-      Eigen::Vector2f pt = point_cloud_[j];
-      double dist = distance_to_collision(curv_option, pt);
-      min_dist = std::min(dist,min_dist);
-    }
-    //std::cout << " " << min_dist << "";
-    if (curv_option != 0.) {
-      int side = (2*(curv_option>0) - 1) * (curv_option != 0);
-      Eigen::Vector2f center;
-      center(0) = 0;
-      center(1) = 1/curv_option;
-      float radius = 1/abs(curv_option);
-      float start_angle;
-      float end_angle;
-      if (side == 1) {
-        start_angle = -3.14/2;
-        end_angle = start_angle+min_dist*abs(curv_option);
-      } else {
-        end_angle = 3.14/2;
-        start_angle = end_angle-min_dist*abs(curv_option);
-      }
-      visualization::DrawArc(center,
-              radius,
-              start_angle,
-              end_angle,
-              0xfca903,
-              local_viz_msg_);
-    }
+  for (float curvature = -1.; curvature <= 1; curvature += .25) {
+    Path path = {};
+    path.curvature = curvature;
+    path_options.push_back(path);
+  }
+  
+  
+//   Eigen::Matrix<double,13,1> curv_set_;
+//   Eigen::Matrix<double,13,1> cost_;
+//   curv_set_ << -2,-1,-0.5,-0.2,-0.1,-0.05,0.,0.05,0.1,0.2,0.5,1,2;
+//   int min_cost_ind = 0;
+//   for (int i=0; i<13; i++) {
+//     double curv_option = curv_set_(i);
+//     double min_dist = 16;
+
+//     for (int j=0; j<((int) point_cloud_.size()); j++){
+//       Eigen::Vector2f pt = point_cloud_[j];
+//       double dist = distance_to_collision(curv_option, pt);
+//       min_dist = std::min(dist,min_dist);
+//     }
+//     //std::cout << " " << min_dist << "";
+//     if (curv_option != 0.) {
+//       int side = (2*(curv_option>0) - 1) * (curv_option != 0);
+//       Eigen::Vector2f center;
+//       center(0) = 0;
+//       center(1) = 1/curv_option;
+//       float radius = 1/abs(curv_option);
+//       float start_angle;
+//       float end_angle;
+//       if (side == 1) {
+//         start_angle = -3.14/2;
+//         end_angle = start_angle+min_dist*abs(curv_option);
+//       } else {
+//         end_angle = 3.14/2;
+//         start_angle = end_angle-min_dist*abs(curv_option);
+//       }
+//       visualization::DrawArc(center,
+//               radius,
+//               start_angle,
+//               end_angle,
+//               0xfca903,
+//               local_viz_msg_);
+//     }
     
 
-    cost_(i) = 1/min_dist + 1/(abs(curv_option)+1);
-    if (cost_(i) < cost_(min_cost_ind)){
-      min_cost_ind = i;
-    }
-  }
+//     cost_(i) = 1/min_dist + 1/(abs(curv_option)+1);
+//     if (cost_(i) < cost_(min_cost_ind)){
+//       min_cost_ind = i;
+//     }
+//   }
 
-  // TODO: Select the "best" curvature
   //double curvature = curv_set_(min_cost_ind);
   //std::cout << "\n\n";
   //std::cout << distance_to_collision(curvature, goal_point) << "\n";
 
+  // Get Metrics on all curves
+  float distance;
+  float free_path_length;
+  Vector2f closest_point;
+  for (auto& path : path_options) {
+    free_path_length = std::numeric_limits<float>::max();
+    closest_point = point_cloud_[0];
+    for (auto& point : point_cloud_) {
+      distance = distance_to_collision(path.curvature, point);
+      if (distance < free_path_length) {
+        free_path_length = distance;
+        closest_point = point;
+      }
+    }
+    path.add_collision_data(free_path_length, closest_point);
+  }
+
+
+  // TODO: Select the "best" curvature
+  Path best_path = path_options[0];
+  float best_rating = 0.;
+  float rating;
+  for (auto& path : path_options) {
+    rating = path.rate_path1(goal_point);
+    printf("Path %f %f\n", path.curvature, rating);
+    if (rating > best_rating) {
+      best_rating = rating;
+      best_path = path;
+    }
+  }
+  
+  float curvature = best_path.curvature;
+  
   drive_msg_.curvature = 0;//curvature;
 
   // TOC for selected_curvature
