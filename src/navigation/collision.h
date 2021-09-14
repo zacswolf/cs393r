@@ -67,10 +67,11 @@ double dist_to_collision_outer(double radius_car, int side, double radius_pt, Ve
 }
 
 // big boi, returns max if no collison 
-const double MAX = 15;
+const double MAX_DIST = 15;
+const double MAX_ANG = M_PI/4;
 double distance_to_collision(double curvature, Vector2f pt) {
   double radius_car = 1/abs(curvature);
-  int side = (2*(curvature>0) - 1) * (curvature != 0);
+  int side = (0 < curvature) - (curvature < 0);
   double radius_pt = (pt-side*Vector2f(0.,radius_car)).norm();
 
   double radius_left_back = sqrt(pow(radius_car - side*(FLAGS_width/2. + FLAGS_del_width), 2) + pow(FLAGS_del_length, 2));
@@ -84,7 +85,7 @@ double distance_to_collision(double curvature, Vector2f pt) {
     if (is_straight_collision(pt)) {
       return pt[0] - (FLAGS_length + FLAGS_del_length);
     }
-    return MAX;
+    return MAX_DIST;
   } else {
     double radius_inner_back;
     double radius_inner_front;
@@ -114,7 +115,7 @@ double distance_to_collision(double curvature, Vector2f pt) {
     } else if (is_outer_collision(radius_pt, radius_outer_front, radius_outer_back)) {
       return dist_to_collision_outer(radius_car, side, radius_pt, pt);
     } else {
-      return MAX;
+      return std::min(MAX_ANG*radius_car, MAX_DIST);
     }
   }
 }

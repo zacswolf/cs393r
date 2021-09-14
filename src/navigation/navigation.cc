@@ -48,7 +48,7 @@ using namespace ros_helpers;
 using namespace collision;
 
 // Create command line arguments
-DEFINE_double(p1_local_coords, 10., "The goal for P1");
+DEFINE_double(p1_local_coords, 50., "The goal for P1");
 DEFINE_int32(sensing_latency, 0, "Robot sensing latency in periods of 1/20th sec");
 DEFINE_int32(actuation_latency, 0, "Robot actuation latency in periods of 1/20th sec");
 
@@ -309,18 +309,18 @@ void Navigation::Run() {
 
   // TODO: Select the "best" curvature
   Path best_path = path_options[0];
-  float best_rating = 0.;
-  float rating;
+  float min_loss = best_path.rate_path1(goal_point);
+  float loss;
   for (auto& path : path_options) {
-    rating = path.rate_path1(goal_point);
-    printf("Path %f %f\n", path.curvature, rating);
-    if (rating > best_rating) {
-      best_rating = rating;
+    loss = path.rate_path1(goal_point);
+    printf("Path %f %f %f %f \n", path.curvature, path.free_path_length, path.closest_point[1], loss);
+    if (loss < min_loss) {
+      min_loss = loss;
       best_path = path;
     }
   }
   
-  drive_msg_.curvature = 0*best_path.curvature;
+  drive_msg_.curvature = best_path.curvature;
 
   // TOC for selected_curvature
   double remaining_distance = goal_point.x() + goal_point.y();
