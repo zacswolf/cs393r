@@ -93,7 +93,7 @@ double distance_to_collision(double curvature, Vector2f pt) {
     if (is_straight_collision(pt)) {
       return pt[0] - (FLAGS_length + FLAGS_del_length);
     }
-    return 4;
+    return 8;
   } else {
     double radius_inner_back;
     double radius_inner_front;
