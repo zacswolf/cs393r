@@ -45,7 +45,7 @@ double dist_to_collision_inner(double radius_car, int side, double radius_pt, Ve
   if (theta_point < 0) {
     theta_point = theta_point + 2*M_PI;
   }
-  return (theta_point - theta_car) * radius_car;
+  return std::max((theta_point - theta_car) * radius_car,0.);
 }
 
 double dist_to_collision_front(double radius_car, int side, double radius_pt, Vector2f pt) {
@@ -54,7 +54,7 @@ double dist_to_collision_front(double radius_car, int side, double radius_pt, Ve
   if (theta_point < 0) {
     theta_point = theta_point + 2*M_PI;
   }
-  return (theta_point - theta_car) * radius_car;
+  return std::max((theta_point - theta_car) * radius_car,0.);
 }
 
 double dist_to_collision_outer(double radius_car, int side, double radius_pt, Vector2f pt) {
@@ -63,12 +63,12 @@ double dist_to_collision_outer(double radius_car, int side, double radius_pt, Ve
   if (theta_point < 0) {
     theta_point = theta_point + 2*M_PI;
   }
-  return (theta_point - theta_car) * radius_car;
+  return std::max((theta_point - theta_car) * radius_car,0.);
 }
 
 // big boi, returns max if no collison 
-const double MAX_DIST = 15;
-const double MAX_ANG = M_PI/4;
+const double MAX_DIST = 8;
+const double MAX_ANG = 1.5*M_PI;
 double distance_to_collision(double curvature, Vector2f pt) {
   double radius_car = 1/abs(curvature);
   int side = (0 < curvature) - (curvature < 0);
@@ -79,8 +79,10 @@ double distance_to_collision(double curvature, Vector2f pt) {
   double radius_left_front = sqrt(pow(radius_car - side*(FLAGS_width/2. + FLAGS_del_width), 2) + pow(FLAGS_length + FLAGS_del_length, 2));
   double radius_right_front = sqrt(pow(radius_car + side*(FLAGS_width/2. + FLAGS_del_width), 2) + pow(FLAGS_length + FLAGS_del_length, 2));
 
-
-  if (side == 0) {
+  if (pt[0] > -FLAGS_del_length && pt[0] < FLAGS_length+FLAGS_del_length && abs(pt[1]) < FLAGS_width/2 + FLAGS_del_width) {
+    // Point inside car, ignore
+    return 0;
+  } else if (side == 0) {
     // Straight
     if (is_straight_collision(pt)) {
       return pt[0] - (FLAGS_length + FLAGS_del_length);
