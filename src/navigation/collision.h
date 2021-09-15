@@ -81,7 +81,7 @@ double distance_to_collision(double curvature, Vector2f pt) {
 
   if (pt[0] > -FLAGS_del_length && pt[0] < FLAGS_length+FLAGS_del_length && abs(pt[1]) < FLAGS_width/2 + FLAGS_del_width) {
     // Point inside car, ignore
-    return std::min(MAX_ANG*radius_car, MAX_DIST);
+    return 0;
   } else if (side == 0) {
     // Straight
     if (is_straight_collision(pt)) {
