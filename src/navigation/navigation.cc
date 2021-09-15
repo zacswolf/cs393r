@@ -34,6 +34,7 @@
 #include "visualization/visualization.h"
 #include "collision.h"
 #include "path.h"
+#include "forward_predict.h"
 
 #include <limits>
 
@@ -46,11 +47,10 @@ using std::vector;
 using namespace math_util;
 using namespace ros_helpers;
 using namespace collision;
+using namespace forward_predict;
 
 // Create command line arguments
 DEFINE_double(p1_local_coords, 50., "The goal for P1");
-DEFINE_int32(sensing_latency, 0, "Robot sensing latency in periods of 1/20th sec");
-DEFINE_int32(actuation_latency, 0, "Robot actuation latency in periods of 1/20th sec");
 
 namespace {
 ros::Publisher drive_pub_;
@@ -147,81 +147,30 @@ void Navigation::Run() {
     visualization::DrawLine(zero, point, 0xDE0000, local_viz_msg_);
   }
   */
+
   // Forward-predict
   
-  double odom_vel = pow(pow(robot_vel_(0),2) + pow(robot_vel_(1),2),0.5);
-
+  float odom_vel = pow(pow(robot_vel_(0),2) + pow(robot_vel_(1),2),0.5);
   std::vector<Eigen::Vector2f> point_cloud_pred = point_cloud_;
   Eigen::Vector2f rel_loc_pred;
-  rel_loc_pred(0) = 0;
-  rel_loc_pred(1) = 0;
-  double rel_angle_pred = 0;
-  double vel_pred = odom_vel;
+  rel_loc_pred(0) = 0.;
+  rel_loc_pred(1) = 0.;
+  float rel_angle_pred = 0.;
+  float vel_pred = odom_vel;
 
-  int total_latency = FLAGS_actuation_latency + FLAGS_sensing_latency;
-  int actuation_latency = FLAGS_actuation_latency;
+  forwardPredict(point_cloud_pred, vel_pred, rel_angle_pred, rel_loc_pred, previous_vel_, previous_curv_);
 
-  for(int i=total_latency-1;i>=actuation_latency-1;i--){
-
-    if (previous_vel_(i) > vel_pred) {
-      // accelerating
-      vel_pred = std::min(std::min(previous_vel_(i),FLAGS_max_speed), vel_pred + FLAGS_max_deceleration/20);
-    } else {
-      // decelerating
-      vel_pred = std::max(std::max(previous_vel_(i),-FLAGS_max_speed), vel_pred - FLAGS_max_deceleration/20);
-    }
-
-    double arc_distance_pred = vel_pred/20;
-
-    if (previous_curv_(i) == 0) {
-      // Driving straight
-      rel_loc_pred(0) = rel_loc_pred(0) + cos(rel_angle_pred)*arc_distance_pred;
-      rel_loc_pred(1) = rel_loc_pred(1) + sin(rel_angle_pred)*arc_distance_pred;
-    } else {
-      // Turning
-      double del_rel_angle_pred = arc_distance_pred*previous_curv_(i);
-      double radius = 1/abs(previous_curv_(i));
-      int side = (2*(previous_curv_(i)>0) - 1) * (previous_curv_(i) != 0);
-      Eigen::Vector2f del_rel_loc_pred;
-      del_rel_loc_pred(0) = radius*sin(abs(del_rel_angle_pred));
-      del_rel_loc_pred(1) = side*(radius - radius*cos(abs(del_rel_angle_pred)));
-
-      // Rotation matrix
-      Eigen::Matrix2f R;
-      R(0,0) = cos(rel_angle_pred);
-      R(0,1) = -sin(rel_angle_pred);
-      R(1,0) = sin(rel_angle_pred);
-      R(1,1) = cos(rel_angle_pred);
-
-      //std::cout << "Rel Loc:  " << del_rel_loc_pred.transpose() << "\n";
-
-      rel_loc_pred = rel_loc_pred + R*del_rel_loc_pred;
-      rel_angle_pred = rel_angle_pred + rel_angle_pred;
-    }
-
-  }
-
-  Eigen::Matrix2f R;
-  R(0,0) = cos(-rel_angle_pred);
-  R(0,1) = -sin(-rel_angle_pred);
-  R(1,0) = sin(-rel_angle_pred);
-  R(1,1) = cos(-rel_angle_pred);
-
-  // Update point cloud
-  for (int i=0; i<((int) point_cloud_pred .size()); i++) {
-    Eigen::Vector2f pt = point_cloud_pred[i];
-    pt = pt - rel_loc_pred;
-    pt = R*pt;
-
-    point_cloud_pred[i] = pt;
-  }
-
-  //visualization::DrawCross(rel_loc_pred, .5, 0x031cfc, local_viz_msg_);
+  visualization::DrawCross(rel_loc_pred, .5, 0x031cfc, local_viz_msg_);
 
   //std::cout << "\n\n";
 
   // TODO: Sample n curvatures
   vector<Path> path_options;
+
+  // float curvature = 0.5;
+  // Path path = Path(curvature);
+  // path.curvature = curvature;
+  // path_options.push_back(path);
 
   for (float curvature = -2.; curvature <= -1./64.; curvature *= 0.5) {
     Path path = Path(curvature);
@@ -319,11 +268,16 @@ void Navigation::Run() {
 
   // Get Metrics on all curves
   float distance;
+  float clearance;
   float free_path_length;
+  float min_clearance;
   Vector2f closest_point;
+  Vector2f clearance_point;
   for (auto& path : path_options) {
+    min_clearance = 4;
     free_path_length = std::numeric_limits<float>::max();
     closest_point = point_cloud_pred[0];
+    clearance_point = point_cloud_pred[0];
     for (auto& point : point_cloud_pred) {
       distance = distance_to_collision(path.curvature, point);
       if (distance < free_path_length) {
@@ -331,7 +285,23 @@ void Navigation::Run() {
         closest_point = point;
       }
     }
-    path.add_collision_data(free_path_length, closest_point);
+    for (auto& point : point_cloud_pred) {
+      float angle = atan2(point[0],-path.side*(point[1]-path.side*path.radius));
+      if (angle < 0) {
+        angle = angle + 2*M_PI;
+      }
+      //std::cout << angle << "\n";
+      if (angle < abs(path.curvature*free_path_length)) {
+        clearance = abs((point-Vector2f(0,path.side*path.radius)).norm() - path.radius);
+        if (clearance < min_clearance) {
+          min_clearance = clearance;
+          clearance_point = point;
+          //std::cout << angle << " ";
+        }
+      }
+    }
+    //std::cout << "\n" << min_clearance << "\n\n";
+    path.add_collision_data(free_path_length, closest_point, min_clearance, clearance_point);
   }
 
   // Visualize arcs
@@ -352,15 +322,21 @@ void Navigation::Run() {
         end_angle = M_PI/2;
         start_angle = end_angle - path.free_path_length * abs(path.curvature);
       }
+      //std::cout << path.clearance << " ";
       visualization::DrawArc(center,
               path.radius,
               start_angle,
               end_angle,
               0xfca903,
               local_viz_msg_);
+      if (path.clearance < 4){
+        //visualization::DrawLine(Vector2f(0,1/path.curvature),path.clearance_point,0xFF0000,local_viz_msg_);
+      }
     }
   }
+  //std::cout << "\n\n";
 
+  // Experimental
   Eigen::Vector2f closest_barrier_point;
   closest_barrier_point = point_cloud_pred[0];
   float min_distance = std::numeric_limits<float>::max();
