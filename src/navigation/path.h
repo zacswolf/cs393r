@@ -54,8 +54,15 @@ class Path {
     this->car_pos = Vector2f(this->radius * sin(this->arc_angle), this->side * this->radius * (cos(this->arc_angle) - 1));
   }
 
-  float rate_path1(const Vector2f& goal_point) {
-    return 300*this->free_path_length * (this->free_path_length < .03) + 0 * 1/this->free_path_length + 1. * this->point_to_path_dist(goal_point);
+  float rate_path1(const Vector2f& goal_point, Vector2f& closest_barrier_point) {
+
+    float barrier_penalty = 0;
+    if (closest_barrier_point[0] > -FLAGS_del_length && closest_barrier_point[0] < FLAGS_length+FLAGS_del_length && abs(closest_barrier_point[1]) < FLAGS_width/2 + FLAGS_del_width) {
+      barrier_penalty = this->curvature/closest_point[1];
+      printf("Collision!");
+    }
+    return -this->free_path_length + 0.01*abs(this->curvature) + 100*barrier_penalty;
+    //return 300*this->free_path_length * (this->free_path_length < .03) + 0 * 1/this->free_path_length + 1. * this->point_to_path_dist(goal_point);
   }
 };
 
