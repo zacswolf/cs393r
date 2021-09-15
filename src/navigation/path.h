@@ -33,7 +33,7 @@ class Path {
     if (this->curvature == 0) {
       return goal_point[1];
     } else {
-      float arc_angle_to_point = fmod(atan2(goal_point[0], goal_point[1] - this->side * this->radius)+ 2*M_PI, 2*M_PI);
+      float arc_angle_to_point = fmod(atan2(goal_point[0], - this->side * goal_point[1] + this->radius)+ 2*M_PI, 2*M_PI);
       if (arc_angle_to_point < this->arc_angle) {
         Vector2f center_point = Vector2f(0, this->radius * this->side);
         return (goal_point-center_point).norm();

@@ -286,10 +286,7 @@ void Navigation::Run() {
       }
     }
     for (auto& point : point_cloud_pred) {
-      float angle = atan2(point[0],-path.side*(point[1]-path.side*path.radius));
-      if (angle < 0) {
-        angle = angle + 2*M_PI;
-      }
+      float angle = fmod(atan2(point[0],-path.side*point[1]+path.radius)+2*M_PI, 2*M_PI);
       //std::cout << angle << "\n";
       if (angle < abs(path.curvature*free_path_length)) {
         clearance = abs((point-Vector2f(0,path.side*path.radius)).norm() - path.radius);
@@ -322,16 +319,12 @@ void Navigation::Run() {
         end_angle = M_PI/2;
         start_angle = end_angle - path.free_path_length * abs(path.curvature);
       }
-      //std::cout << path.clearance << " ";
       visualization::DrawArc(center,
               path.radius,
               start_angle,
               end_angle,
               0xfca903,
               local_viz_msg_);
-      if (path.clearance < 4){
-        //visualization::DrawLine(Vector2f(0,1/path.curvature),path.clearance_point,0xFF0000,local_viz_msg_);
-      }
     }
   }
   //std::cout << "\n\n";
