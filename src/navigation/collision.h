@@ -108,8 +108,6 @@ double distance_to_collision(double curvature, Vector2f pt) {
       radius_outer_front = radius_left_front;
     }
 
-    // printf("Radii: %.3f, %.3f, %.3f\n", radius_pt, radius_inner_front, radius_outer_front);
-
     if (is_inner_collision(radius_pt, radius_inner_back, radius_inner_front)) {
       return dist_to_collision_inner(radius_car, side, radius_pt, pt);
     } else if (is_front_collision(radius_pt, radius_inner_front, radius_outer_front)) {

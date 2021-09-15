@@ -134,43 +134,31 @@ void Navigation::Run() {
   // const Vector2f goal_point2 = Vector2f(FLAGS_p1_local_coords, 0) + odom_start_loc_ - odom_loc_;
   visualization::DrawCross(goal_point, .5, 0x39B81D, local_viz_msg_);
 
+  // Draw car bounding box
+  Vector2f p_bl = Vector2f(-FLAGS_del_length,FLAGS_width/2+FLAGS_del_width);
+  Vector2f p_br = Vector2f(-FLAGS_del_length,-FLAGS_width/2-FLAGS_del_width);
+  Vector2f p_fl = Vector2f(FLAGS_length+FLAGS_del_length,FLAGS_width/2+FLAGS_del_width);
+  Vector2f p_fr = Vector2f(FLAGS_length+FLAGS_del_length,-FLAGS_width/2-FLAGS_del_width);
+  visualization::DrawLine(p_bl,p_fl,0x00FFAA,local_viz_msg_);
+  visualization::DrawLine(p_br,p_fr,0x00FFAA,local_viz_msg_);
+  visualization::DrawLine(p_fl,p_fr,0x00FFAA,local_viz_msg_);
+  visualization::DrawLine(p_bl,p_br,0x00FFAA,local_viz_msg_);
+
   // The control iteration goes here. 
   // Feel free to make helper functions to structure the control appropriately.
-  
-  // The latest observed point cloud is accessible via "point_cloud_"
-
-  /*
-  static Vector2f zero = Vector2f(0., 0.);
-
-  for (uint i = 0; i < point_cloud_.size(); i += 100) {
-    auto point = point_cloud_[i];
-    visualization::DrawLine(zero, point, 0xDE0000, local_viz_msg_);
-  }
-  */
 
   // Forward-predict
-  
   float odom_vel = pow(pow(robot_vel_(0),2) + pow(robot_vel_(1),2),0.5);
   std::vector<Eigen::Vector2f> point_cloud_pred = point_cloud_;
-  Eigen::Vector2f rel_loc_pred;
-  rel_loc_pred(0) = 0.;
-  rel_loc_pred(1) = 0.;
+  Eigen::Vector2f rel_loc_pred = Vector2f(0., 0.);
   float rel_angle_pred = 0.;
   float vel_pred = odom_vel;
-
   forwardPredict(point_cloud_pred, vel_pred, rel_angle_pred, rel_loc_pred, previous_vel_, previous_curv_);
 
   visualization::DrawCross(rel_loc_pred, .5, 0x031cfc, local_viz_msg_);
 
-  //std::cout << "\n\n";
-
-  // TODO: Sample n curvatures
+  // Sample n curvatures
   vector<Path> path_options;
-
-  // float curvature = 0.5;
-  // Path path = Path(curvature);
-  // path.curvature = curvature;
-  // path_options.push_back(path);
 
   for (float curvature = -2.; curvature <= -1./64.; curvature *= 0.5) {
     Path path = Path(curvature);
@@ -262,10 +250,6 @@ void Navigation::Run() {
 //     }
 //   }
 
-  //double curvature = curv_set_(min_cost_ind);
-  //std::cout << "\n\n";
-  //std::cout << distance_to_collision(curvature, goal_point) << "\n";
-
   // Get Metrics on all curves
   float distance;
   float clearance;
@@ -303,8 +287,6 @@ void Navigation::Run() {
 
   // Visualize arcs
   for (auto& path : path_options) {
-    // path.curvature
-    // path.free_path_length
     if (path.curvature == 0) {
       visualization::DrawLine(Vector2f(0, 0), Vector2f(path.free_path_length, 0), 0xfca903, local_viz_msg_);
     } else {
@@ -330,8 +312,7 @@ void Navigation::Run() {
   //std::cout << "\n\n";
 
   // Experimental
-  Eigen::Vector2f closest_barrier_point;
-  closest_barrier_point = point_cloud_pred[0];
+  Eigen::Vector2f closest_barrier_point = point_cloud_pred[0];
   float min_distance = std::numeric_limits<float>::max();
   for (auto& pt : point_cloud_pred) {
     float distance;
@@ -347,10 +328,10 @@ void Navigation::Run() {
 
   // TODO: Select the "best" curvature
   Path best_path = path_options[0];
-  float min_loss = best_path.rate_path1(goal_point,closest_barrier_point);
+  float min_loss = best_path.rate_path1(goal_point, closest_barrier_point);
   float loss;
   for (auto& path : path_options) {
-    loss = path.rate_path1(goal_point,closest_barrier_point);
+    loss = path.rate_path1(goal_point, closest_barrier_point);
     //printf("Path %f %f %f %f \n", path.curvature, path.free_path_length, path.closest_point[1], loss);
     if (loss < min_loss) {
       min_loss = loss;
@@ -378,20 +359,6 @@ void Navigation::Run() {
   }
   previous_vel_(0) = drive_msg_.velocity;
   previous_curv_(0) = drive_msg_.curvature;
-
-  // drive_msg_.curvature = 0.;
-  // drive_msg_.velocity = 1.;
-
-  // Draw car bounding box
-
-  Vector2f p_bl = Vector2f(-FLAGS_del_length,FLAGS_width/2+FLAGS_del_width);
-  Vector2f p_br = Vector2f(-FLAGS_del_length,-FLAGS_width/2-FLAGS_del_width);
-  Vector2f p_fl = Vector2f(FLAGS_length+FLAGS_del_length,FLAGS_width/2+FLAGS_del_width);
-  Vector2f p_fr = Vector2f(FLAGS_length+FLAGS_del_length,-FLAGS_width/2-FLAGS_del_width);
-  visualization::DrawLine(p_bl,p_fl,0x00FFAA,local_viz_msg_);
-  visualization::DrawLine(p_br,p_fr,0x00FFAA,local_viz_msg_);
-  visualization::DrawLine(p_fl,p_fr,0x00FFAA,local_viz_msg_);
-  visualization::DrawLine(p_bl,p_br,0x00FFAA,local_viz_msg_);
 
   // Add timestamps to all messages.
   local_viz_msg_.header.stamp = ros::Time::now();
