@@ -223,6 +223,11 @@ void Navigation::Run() {
   // TODO: Sample n curvatures
   vector<Path> path_options;
 
+  // float curvature = 0.5;
+  // Path path = Path(curvature);
+  // path.curvature = curvature;
+  // path_options.push_back(path);
+
   for (float curvature = -2.; curvature <= -1./64.; curvature *= 0.5) {
     Path path = Path(curvature);
     path.curvature = curvature;
@@ -319,11 +324,16 @@ void Navigation::Run() {
 
   // Get Metrics on all curves
   float distance;
+  float clearance;
   float free_path_length;
+  float min_clearance;
   Vector2f closest_point;
+  Vector2f clearance_point;
   for (auto& path : path_options) {
+    min_clearance = 4;
     free_path_length = std::numeric_limits<float>::max();
     closest_point = point_cloud_pred[0];
+    clearance_point = point_cloud_pred[0];
     for (auto& point : point_cloud_pred) {
       distance = distance_to_collision(path.curvature, point);
       if (distance < free_path_length) {
@@ -331,7 +341,23 @@ void Navigation::Run() {
         closest_point = point;
       }
     }
-    path.add_collision_data(free_path_length, closest_point);
+    for (auto& point : point_cloud_pred) {
+      float angle = atan2(point[0],-path.side*(point[1]-path.side*path.radius));
+      if (angle < 0) {
+        angle = angle + 2*M_PI;
+      }
+      //std::cout << angle << "\n";
+      if (angle < abs(path.curvature*free_path_length)) {
+        clearance = abs((point-Vector2f(0,path.side*path.radius)).norm() - path.radius);
+        if (clearance < min_clearance) {
+          min_clearance = clearance;
+          clearance_point = point;
+          //std::cout << angle << " ";
+        }
+      }
+    }
+    //std::cout << "\n" << min_clearance << "\n\n";
+    path.add_collision_data(free_path_length, closest_point, min_clearance, clearance_point);
   }
 
   // Visualize arcs
@@ -352,15 +378,21 @@ void Navigation::Run() {
         end_angle = M_PI/2;
         start_angle = end_angle - path.free_path_length * abs(path.curvature);
       }
+      //std::cout << path.clearance << " ";
       visualization::DrawArc(center,
               path.radius,
               start_angle,
               end_angle,
               0xfca903,
               local_viz_msg_);
+      if (path.clearance < 4){
+        //visualization::DrawLine(Vector2f(0,1/path.curvature),path.clearance_point,0xFF0000,local_viz_msg_);
+      }
     }
   }
+  //std::cout << "\n\n";
 
+  // Experimental
   Eigen::Vector2f closest_barrier_point;
   closest_barrier_point = point_cloud_pred[0];
   float min_distance = std::numeric_limits<float>::max();
