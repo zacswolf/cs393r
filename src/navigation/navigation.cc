@@ -50,7 +50,7 @@ using namespace collision;
 using namespace forward_predict;
 
 // Create command line arguments
-DEFINE_double(p1_local_coords, 50., "The goal for P1");
+DEFINE_double(p1_local_coords, 3., "The goal for P1");
 
 namespace {
 ros::Publisher drive_pub_;
@@ -83,8 +83,13 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
       "map", "navigation_global");
   InitRosHeader("base_link", &drive_msg_.header);
 
-  previous_vel_.setZero();
-  previous_curv_.setZero();
+  std::fill(std::begin(previous_vel_), std::end(previous_vel_), 0.);
+  std::fill(std::begin(previous_vel_m), std::end(previous_vel_m), 0.);
+  std::fill(std::begin(previous_curv_), std::end(previous_curv_), 0.);
+  std::fill(std::begin(previous_curv_m), std::end(previous_curv_m), 0.);
+
+  // previous_vel_ = std::array<double>(10, 0.);
+  // previous_curv_= std::array<double, 10>(10, 0.);
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
@@ -148,13 +153,14 @@ void Navigation::Run() {
   // Feel free to make helper functions to structure the control appropriately.
 
   // Forward-predict
-  float odom_vel = pow(pow(robot_vel_(0),2) + pow(robot_vel_(1),2),0.5);
+  float odom_vel = robot_vel_.norm();
   std::vector<Eigen::Vector2f> point_cloud_pred = point_cloud_;
   Eigen::Vector2f rel_loc_pred = Vector2f(0., 0.);
   float rel_angle_pred = 0.;
   float vel_pred = odom_vel;
   forwardPredict(point_cloud_pred, vel_pred, rel_angle_pred, rel_loc_pred, previous_vel_, previous_curv_);
 
+  // printf("rel_loc_pred %f %f\n", rel_loc_pred[0], rel_loc_pred[1]);
   visualization::DrawCross(rel_loc_pred, .5, 0x031cfc, local_viz_msg_);
 
   // Sample n curvatures
@@ -199,56 +205,6 @@ void Navigation::Run() {
   //     path_options.push_back(path);
   //   }
   // }
-  // Path path1 = Path(1/20);
-  // path1.curvature = 1/20;
-  // path_options.push_back(path1);
-
-  // Path path2 = Path(-1/20);
-  // path2.curvature = -1/20;
-  // path_options.push_back(path2);
-//   Eigen::Matrix<double,13,1> curv_set_;
-//   Eigen::Matrix<double,13,1> cost_;
-//   curv_set_ << -2,-1,-0.5,-0.2,-0.1,-0.05,0.,0.05,0.1,0.2,0.5,1,2;
-//   int min_cost_ind = 0;
-//   for (int i=0; i<13; i++) {
-//     double curv_option = curv_set_(i);
-//     double min_dist = 16;
-
-//     for (int j=0; j<((int) point_cloud_.size()); j++){
-//       Eigen::Vector2f pt = point_cloud_[j];
-//       double dist = distance_to_collision(curv_option, pt);
-//       min_dist = std::min(dist,min_dist);
-//     }
-//     //std::cout << " " << min_dist << "";
-//     if (curv_option != 0.) {
-//       int side = (2*(curv_option>0) - 1) * (curv_option != 0);
-//       Eigen::Vector2f center;
-//       center(0) = 0;
-//       center(1) = 1/curv_option;
-//       float radius = 1/abs(curv_option);
-//       float start_angle;
-//       float end_angle;
-//       if (side == 1) {
-//         start_angle = -3.14/2;
-//         end_angle = start_angle+min_dist*abs(curv_option);
-//       } else {
-//         end_angle = 3.14/2;
-//         start_angle = end_angle-min_dist*abs(curv_option);
-//       }
-//       visualization::DrawArc(center,
-//               radius,
-//               start_angle,
-//               end_angle,
-//               0xfca903,
-//               local_viz_msg_);
-//     }
-    
-
-//     cost_(i) = 1/min_dist + 1/(abs(curv_option)+1);
-//     if (cost_(i) < cost_(min_cost_ind)){
-//       min_cost_ind = i;
-//     }
-//   }
 
   // Get Metrics on all curves
   float distance;
@@ -341,24 +297,45 @@ void Navigation::Run() {
 
   drive_msg_.curvature = best_path.curvature;
 
-  // TOC for selected_curvature
-  double remaining_distance = goal_point.x() + goal_point.y();
+  // TOC
+  // Either drive max speed or 0 speed
+  drive_msg_.velocity = FLAGS_max_speed;
+  double max_distance_to_stop = pow(drive_msg_.velocity, 2)/(2*FLAGS_max_deceleration);
 
-  if (pow(vel_pred, 2)/(2*FLAGS_max_deceleration) > remaining_distance) {
-    // We need to stop
+  double distance_to_stop = pow(std::max(odom_vel, vel_pred), 2)/(2*FLAGS_max_deceleration);
+
+  float goal_point_dist = goal_point.x() + goal_point.y();
+
+  float stop = std::min(goal_point_dist, best_path.free_path_length);
+
+  if (stop <= distance_to_stop) {
+    // We need to stop because we are about to reach the goal point
+    if (odom_vel!=0. && vel_pred!=0.){
+      printf("%f %f\n", odom_vel, vel_pred);
+    }
     drive_msg_.velocity = 0;
-  } else {
-    // Go max speed
-    drive_msg_.velocity = FLAGS_max_speed;
+  } else if (stop <= max_distance_to_stop) {
+    if (odom_vel != 0. && vel_pred != 0.){
+      printf("%f %f %f \n", odom_vel, vel_pred, distance_to_stop);
+    }
+    
+    // printf("Close!, distance_to_stop: %f, free_path_length: %f\n\n",distance_to_stop, best_path.free_path_length);
+    drive_msg_.velocity = std::min(odom_vel, vel_pred)*.9;
+    if (drive_msg_.velocity <= .0001){
+      drive_msg_.velocity = 0;
+    }
   }
+
+
+  // TOC for collision detection
 
   // shift previous values
   for(int i=8;i>=0;i--){
-    previous_vel_(i+1) = previous_vel_(i);
-    previous_curv_(i+1) = previous_curv_(i);
+    previous_vel_[i+1] = previous_vel_[i];
+    previous_curv_[i+1] = previous_curv_[i];
   }
-  previous_vel_(0) = drive_msg_.velocity;
-  previous_curv_(0) = drive_msg_.curvature;
+  previous_vel_[0] = drive_msg_.velocity;
+  previous_curv_[0] = drive_msg_.curvature;
 
   // Add timestamps to all messages.
   local_viz_msg_.header.stamp = ros::Time::now();

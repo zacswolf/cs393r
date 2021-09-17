@@ -6,7 +6,7 @@
 using Eigen::Vector2f;
 
 DEFINE_double(max_acceleration, 4., "The max acceleration");
-DEFINE_double(max_deceleration, 4., "The max deceleration");
+DEFINE_double(max_deceleration, 2., "The max deceleration");
 DEFINE_double(max_speed, 1., "The max speed");
 
 DEFINE_double(length, .4, "The wheel base of the robot");
@@ -80,7 +80,7 @@ double distance_to_collision(double curvature, Vector2f pt) {
   double radius_right_front = sqrt(pow(radius_car + side*(FLAGS_width/2. + FLAGS_del_width), 2) + pow(FLAGS_length + FLAGS_del_length, 2));
 
   if (pt[0] > -FLAGS_del_length && pt[0] < FLAGS_length+FLAGS_del_length && abs(pt[1]) < FLAGS_width/2 + FLAGS_del_width) {
-    // Point inside car, ignore
+    // Point inside car
     return 0;
   } else if (side == 0) {
     // Straight
@@ -89,6 +89,8 @@ double distance_to_collision(double curvature, Vector2f pt) {
     }
     return MAX_DIST;
   } else {
+    // Curve
+    // TODO: 4 line this
     double radius_inner_back;
     double radius_inner_front;
     double radius_outer_back;
