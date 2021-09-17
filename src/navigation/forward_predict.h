@@ -13,13 +13,12 @@ DEFINE_int32(actuation_latency, 0, "Robot actuation latency in periods of 1/20th
 
 namespace forward_predict {
 
-void forwardPredict(std::vector<Vector2f> &point_cloud_pred, float &vel_pred, float &rel_angle_pred, Vector2f &rel_loc_pred, std::array<double, 10> previous_vel_, std::array<double, 10> previous_curv_) {
+void forwardPredict(std::vector<Vector2f> &point_cloud_pred, float &vel_pred, float &rel_angle_pred, Vector2f &rel_loc_pred, std::array<double, 10> previous_vel_, std::array<double, 10> previous_curv_, Vector2f &goal_point_pred) {
 
   int total_latency = FLAGS_actuation_latency + FLAGS_sensing_latency;
   int actuation_latency = FLAGS_actuation_latency;
 
-  // for(int i = total_latency - 1; i >= actuation_latency-1; i--) {
-  for(int i = total_latency; i >= actuation_latency; i--) {
+  for(int i = total_latency; i > actuation_latency; i--) {
     if (vel_pred < previous_vel_[i]) {
       // accelerating
       vel_pred = std::min(std::min(previous_vel_[i], FLAGS_max_speed), vel_pred + FLAGS_max_acceleration/20);
@@ -47,7 +46,7 @@ void forwardPredict(std::vector<Vector2f> &point_cloud_pred, float &vel_pred, fl
 
       //std::cout << "Rel Loc:  " << del_rel_loc_pred.transpose() << "\n";
 
-      rel_loc_pred = rel_loc_pred + R*del_rel_loc_pred;
+      rel_loc_pred = rel_loc_pred + R * del_rel_loc_pred;
       rel_angle_pred = rel_angle_pred + rel_angle_pred;
     }
 
@@ -59,11 +58,15 @@ void forwardPredict(std::vector<Vector2f> &point_cloud_pred, float &vel_pred, fl
   // Update point cloud
   for (uint i = 0; i < point_cloud_pred.size(); i++) {
     Eigen::Vector2f pt = point_cloud_pred[i];
-    pt = pt - rel_loc_pred;
+    pt -= rel_loc_pred;
     pt = R * pt;
 
     point_cloud_pred[i] = pt;
   }
+
+  // Update goal point
+  goal_point_pred -= rel_loc_pred;
+  goal_point_pred = R * goal_point_pred;
 }
 
 }  // namespace navigation

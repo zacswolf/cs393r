@@ -6,13 +6,13 @@
 using Eigen::Vector2f;
 
 DEFINE_double(max_acceleration, 4., "The max acceleration");
-DEFINE_double(max_deceleration, 2., "The max deceleration");
+DEFINE_double(max_deceleration, 4., "The max deceleration");
 DEFINE_double(max_speed, 1., "The max speed");
 
-DEFINE_double(length, .4, "The wheel base of the robot");
-DEFINE_double(width, .2, "The track width of the robot");
-DEFINE_double(del_length, .1, "The length margin of the robot");
-DEFINE_double(del_width, .1, "The width margin of the robot");
+DEFINE_double(length, .32385, "The wheel base of the robot");
+DEFINE_double(width, .2286, "The track width of the robot");
+DEFINE_double(del_length, .088075 + .1, "The length margin of the robot");
+DEFINE_double(del_width, .0254 + .1, "The width margin of the robot");
 // DEFINE_double(safety_margin, .15, "The safety margin for the robot");
 
 #ifndef COLLISION_H
