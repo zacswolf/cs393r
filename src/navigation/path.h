@@ -3,7 +3,9 @@
 
 #include "eigen3/Eigen/Dense"
 
+using namespace navigation;
 using Eigen::Vector2f;
+
 DEFINE_double(min_clearance, .2, "The min clearance");
 
 #ifndef PATH_H
@@ -58,7 +60,7 @@ class Path {
     this->clearance_point = clearance_point;
   }
 
-  float rate_path1(const Vector2f& goal_point, Vector2f& closest_barrier_point) {
+  float rate_path1(const Vector2f& goal_point, Vector2f& closest_barrier_point, float previous_curv) {
     float barrier_penalty = 0;
     if (closest_barrier_point[0] > -FLAGS_del_length && closest_barrier_point[0] < FLAGS_length + FLAGS_del_length && abs(closest_barrier_point[1]) < FLAGS_width/2 + FLAGS_del_width) {
       this->free_path_length = 0.;
@@ -71,8 +73,10 @@ class Path {
       clearance_penalty = 1;
       //printf("Avoiding close clearance!");
     }
+    int previous_side = (0 < previous_curv) - (previous_curv < 0);
+    int side_penalty = previous_side ^= this->side;
 
-    return -this->free_path_length + 0.01*abs(this->curvature) + 100*clearance_penalty + 0*barrier_penalty;
+    return -this->free_path_length + 0.01*abs(this->curvature) + 100*clearance_penalty + 0*barrier_penalty + 0.1*side_penalty;
     //return 300*this->free_path_length * (this->free_path_length < .03) + 0 * 1/this->free_path_length + 1. * this->point_to_path_dist(goal_point);
   }
 };

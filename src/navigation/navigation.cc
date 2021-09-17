@@ -269,11 +269,11 @@ void Navigation::Run() {
 
   // Select the "best" curvature
   Path best_path = path_options[0];
-  float min_loss = best_path.rate_path1(goal_point_pred, closest_barrier_point);
+  float min_loss = best_path.rate_path1(goal_point_pred, closest_barrier_point, previous_curv_[0]);
   float loss;
 
   for (auto& path : path_options) {
-    loss = path.rate_path1(goal_point_pred, closest_barrier_point);
+    loss = path.rate_path1(goal_point_pred, closest_barrier_point, previous_curv_[0]);
     //printf("Path %f %f %f %f \n", path.curvature, path.free_path_length, path.closest_point[1], loss);
     
     if (loss < min_loss) {

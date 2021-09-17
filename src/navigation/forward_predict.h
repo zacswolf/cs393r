@@ -10,24 +10,25 @@ using Eigen::Vector2f;
 
 using namespace navigation;
 
-DEFINE_int32(sensing_latency, 0, "Robot sensing latency in periods of 1/20th sec");
-DEFINE_int32(actuation_latency, 0, "Robot actuation latency in periods of 1/20th sec");
+DEFINE_int32(sensing_latency, 1, "Robot sensing latency in periods of 1/20th sec");
+DEFINE_int32(actuation_latency, 2, "Robot actuation latency in periods of 1/20th sec");
 
 namespace forward_predict {
 
 void forwardPredict(std::vector<Vector2f> &point_cloud_pred, float &vel_pred, float &rel_angle_pred, Vector2f &rel_loc_pred, std::array<double, COMMAND_MEMORY_LENGTH> previous_vel_, std::array<double, COMMAND_MEMORY_LENGTH> previous_curv_, Vector2f &goal_point_pred) {
 
   int total_latency = FLAGS_actuation_latency + FLAGS_sensing_latency;
-  int actuation_latency = FLAGS_actuation_latency;
 
-  for(int i = total_latency; i > actuation_latency; i--) {
-    if (vel_pred < previous_vel_[i]) {
-      // accelerating
-      vel_pred = std::min(std::min(previous_vel_[i], FLAGS_max_speed), vel_pred + FLAGS_max_acceleration/20);
-    } else if (vel_pred > previous_vel_[i]) {
-      // decelerating
-      vel_pred = std::max(std::max(previous_vel_[i], -FLAGS_max_speed), vel_pred - FLAGS_max_deceleration/20);
-    }
+  for(int i = total_latency-1; i >= 0; i--) {
+    // if (vel_pred < previous_vel_[i]) {
+    //   // accelerating
+    //   vel_pred = std::min(std::min(previous_vel_[i], FLAGS_max_speed), vel_pred + FLAGS_max_acceleration/20);
+    // } else if (vel_pred > previous_vel_[i]) {
+    //   // decelerating
+    //   vel_pred = std::max(std::max(previous_vel_[i], -FLAGS_max_speed), vel_pred - FLAGS_max_deceleration/20);
+    // }
+
+    vel_pred = previous_vel_[i];
 
     double arc_distance_pred = vel_pred/20;
 
@@ -70,6 +71,7 @@ void forwardPredict(std::vector<Vector2f> &point_cloud_pred, float &vel_pred, fl
   goal_point_pred -= rel_loc_pred;
   goal_point_pred = R * goal_point_pred;
 }
+
 
 }  // namespace navigation
 
