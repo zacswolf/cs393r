@@ -301,17 +301,14 @@ void Navigation::Run() {
   // TODO: This only works when the goal point is strictly in front of the car
   float stop = std::min(goal_point_pred.norm() * (goal_point_pred[0] > 0), best_path.free_path_length);
   
-  printf("%i %f %f\n", vel_pred < FLAGS_max_speed, stop, distance_to_stop_after_accel);
-  if (vel_pred < FLAGS_max_speed && stop > distance_to_stop_after_accel) {
-    // accelerating
-    printf("accelerating\n");
+  if (stop > distance_to_stop_after_accel) {
+    // not decelerating
     drive_msg_.velocity = std::min(FLAGS_max_acceleration/20 + vel_pred, FLAGS_max_speed);
   } else {
     // Robot needs to stop
-    printf("stop\n");
-    if (odom_vel != 0. && vel_pred != 0.){
-      printf("%f %f\n", odom_vel, vel_pred);
-    }
+    // if (odom_vel != 0. && vel_pred != 0.){
+    //   printf("%f %f\n", odom_vel, vel_pred);
+    // }
     drive_msg_.velocity = std::max(vel_pred - FLAGS_max_deceleration/20., 0.);
   }
 
