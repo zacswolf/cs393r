@@ -285,49 +285,35 @@ void Navigation::Run() {
   drive_msg_.curvature = best_path.curvature;
 
   // TOC
-  drive_msg_.velocity = FLAGS_max_speed;
 
   // Distance it takes the robot to stop if it's driving full speed
-  double max_distance_to_stop = pow(FLAGS_max_speed, 2)/(2*FLAGS_max_deceleration);
+  // double max_distance_to_stop = pow(FLAGS_max_speed, 2)/(2*FLAGS_max_deceleration);
 
   // Distance it takes the robot to stop if it's driving at the current speed
-  double distance_to_stop = pow(vel_pred, 2)/(2*FLAGS_max_deceleration);
+  // double distance_to_stop = pow(vel_pred, 2)/(2*FLAGS_max_deceleration);
+
+  double distance_to_stop_after_accel = .05 * (vel_pred + .5*FLAGS_max_acceleration*.05) + pow(vel_pred + FLAGS_max_acceleration/20, 2)/(2*FLAGS_max_deceleration);
+  // (vel_pred + (vel_pred + FLAGS_max_acceleration/20.)) / (2. * 20.) + pow(vel_pred + FLAGS_max_acceleration/20, 2)/(2*FLAGS_max_deceleration);
   //std::max(odom_vel, vel_pred)
   
 
   // Distance till robot needs to stop
   // TODO: This only works when the goal point is strictly in front of the car
   float stop = std::min(goal_point_pred.norm() * (goal_point_pred[0] > 0), best_path.free_path_length);
-
-  if (stop <= distance_to_stop) {
+  
+  printf("%i %f %f\n", vel_pred < FLAGS_max_speed, stop, distance_to_stop_after_accel);
+  if (vel_pred < FLAGS_max_speed && stop > distance_to_stop_after_accel) {
+    // accelerating
+    printf("accelerating\n");
+    drive_msg_.velocity = std::min(FLAGS_max_acceleration/20 + vel_pred, FLAGS_max_speed);
+  } else {
     // Robot needs to stop
+    printf("stop\n");
     if (odom_vel != 0. && vel_pred != 0.){
       printf("%f %f\n", odom_vel, vel_pred);
     }
-    drive_msg_.velocity = std::max(-FLAGS_max_deceleration/20 + vel_pred, 0.);
-  } else if (stop <= max_distance_to_stop) {
-    // Robot is stopping too fast
-    drive_msg_.velocity = vel_pred;
-  }  else if (odom_vel < FLAGS_max_speed) {
-    drive_msg_.velocity = std::min(FLAGS_max_acceleration/20 + vel_pred, FLAGS_max_speed);
+    drive_msg_.velocity = std::max(vel_pred - FLAGS_max_deceleration/20., 0.);
   }
-  // else if (stop <= max_distance_to_stop) {
-  //   // Robot shouldn't accelerate nor decelerate
-  //   if (odom_vel != 0. && vel_pred != 0.){
-  //     printf("%f %f %f \n", odom_vel, vel_pred, distance_to_stop);
-  //   }
-    
-  //   // printf("Close!, distance_to_stop: %f, free_path_length: %f\n\n",distance_to_stop, best_path.free_path_length);
-  //   drive_msg_.velocity = std::min(odom_vel, vel_pred) * .9;
-    
-  //   if (drive_msg_.velocity <= .0001){
-  //     // Trucate speed to 0 
-  //     drive_msg_.velocity = 0;
-  //   }
-  // }
-
-
-  // TOC for collision detection
 
   // shift previous values
   for(int i = COMMAND_MEMORY_LENGTH-2; i >= 0; i--){
