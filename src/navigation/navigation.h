@@ -89,11 +89,10 @@ class Navigation {
   float nav_goal_angle_;
 
   // Previous velocity commands
-  Eigen::Matrix<double,10,1> previous_vel_;
+  std::array<double, 10> previous_vel_;
 
   // Previous curvature commands
-  Eigen::Matrix<double,10,1> previous_curv_;
-
+  std::array<double, 10> previous_curv_;
 };
 
 }  // namespace navigation
