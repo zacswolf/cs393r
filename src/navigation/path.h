@@ -33,9 +33,9 @@ class Path {
     if (this->curvature == 0) {
       return goal_point[1];
     } else {
-      float arc_angle_to_point = fmod(atan2(goal_point[0], - this->side * goal_point[1] + this->radius)+ 2*M_PI, 2*M_PI);
+      float arc_angle_to_point = fmod(atan2(goal_point[0], -this->side * goal_point[1] + this->radius) + 2*M_PI, 2*M_PI);
       if (arc_angle_to_point < this->arc_angle) {
-        Vector2f center_point = Vector2f(0, this->radius * this->side);
+        Vector2f center_point = Vector2f(0., this->radius * this->side);
         return (goal_point-center_point).norm();
       } else {
         // return min((goal_point-this.car_pos).norm(), goal_point.norm());
@@ -52,7 +52,7 @@ class Path {
     this->closest_point = closest_point;
     // TODO: Add more to this 
     this->arc_angle = free_path_length * abs(this->curvature);
-    this->car_pos = Vector2f(this->radius * sin(this->arc_angle), this->side * this->radius * (cos(this->arc_angle) - 1));
+    this->car_pos = this->radius * Vector2f(sin(this->arc_angle), this->side * (cos(this->arc_angle) - 1));
     this->clearance = clearance;
     this->clearance_point = clearance_point;
   }
@@ -60,7 +60,7 @@ class Path {
   float rate_path1(const Vector2f& goal_point, Vector2f& closest_barrier_point) {
 
     float barrier_penalty = 0;
-    if (closest_barrier_point[0] > -FLAGS_del_length && closest_barrier_point[0] < FLAGS_length+FLAGS_del_length && abs(closest_barrier_point[1]) < FLAGS_width/2 + FLAGS_del_width) {
+    if (closest_barrier_point[0] > -FLAGS_del_length && closest_barrier_point[0] < FLAGS_length + FLAGS_del_length && abs(closest_barrier_point[1]) < FLAGS_width/2 + FLAGS_del_width) {
       barrier_penalty = this->curvature/closest_point[1];
       printf("Collision!");
     }

@@ -84,12 +84,7 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   InitRosHeader("base_link", &drive_msg_.header);
 
   std::fill(std::begin(previous_vel_), std::end(previous_vel_), 0.);
-  std::fill(std::begin(previous_vel_m), std::end(previous_vel_m), 0.);
   std::fill(std::begin(previous_curv_), std::end(previous_curv_), 0.);
-  std::fill(std::begin(previous_curv_m), std::end(previous_curv_m), 0.);
-
-  // previous_vel_ = std::array<double>(10, 0.);
-  // previous_curv_= std::array<double, 10>(10, 0.);
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
@@ -135,19 +130,19 @@ void Navigation::Run() {
   if (!odom_initialized_) return;
 
   // Draw goal point p1, relative to car
-  const Vector2f goal_point = Vector2f(FLAGS_p1_local_coords - (odom_start_loc_ - odom_loc_).norm(), 0);
-  // const Vector2f goal_point2 = Vector2f(FLAGS_p1_local_coords, 0) + odom_start_loc_ - odom_loc_;
+  const Vector2f goal_point = Vector2f(FLAGS_p1_local_coords - (odom_start_loc_ - odom_loc_).norm(), 0.);
+  // const Vector2f goal_point2 = Vector2f(FLAGS_p1_local_coords, 0.) + odom_start_loc_ - odom_loc_;
   visualization::DrawCross(goal_point, .5, 0x39B81D, local_viz_msg_);
 
   // Draw car bounding box
-  Vector2f p_bl = Vector2f(-FLAGS_del_length,FLAGS_width/2+FLAGS_del_width);
-  Vector2f p_br = Vector2f(-FLAGS_del_length,-FLAGS_width/2-FLAGS_del_width);
-  Vector2f p_fl = Vector2f(FLAGS_length+FLAGS_del_length,FLAGS_width/2+FLAGS_del_width);
-  Vector2f p_fr = Vector2f(FLAGS_length+FLAGS_del_length,-FLAGS_width/2-FLAGS_del_width);
-  visualization::DrawLine(p_bl,p_fl,0x00FFAA,local_viz_msg_);
-  visualization::DrawLine(p_br,p_fr,0x00FFAA,local_viz_msg_);
-  visualization::DrawLine(p_fl,p_fr,0x00FFAA,local_viz_msg_);
-  visualization::DrawLine(p_bl,p_br,0x00FFAA,local_viz_msg_);
+  Vector2f p_bl = Vector2f(-FLAGS_del_length, FLAGS_width/2 + FLAGS_del_width);
+  Vector2f p_br = Vector2f(-FLAGS_del_length, -1*(FLAGS_width/2 + FLAGS_del_width));
+  Vector2f p_fl = Vector2f(FLAGS_length + FLAGS_del_length, FLAGS_width/2 + FLAGS_del_width);
+  Vector2f p_fr = Vector2f(FLAGS_length + FLAGS_del_length, -1*(FLAGS_width/2 + FLAGS_del_width));
+  visualization::DrawLine(p_bl, p_fl, 0x00FFAA, local_viz_msg_);
+  visualization::DrawLine(p_br, p_fr, 0x00FFAA, local_viz_msg_);
+  visualization::DrawLine(p_fl, p_fr, 0x00FFAA, local_viz_msg_);
+  visualization::DrawLine(p_bl, p_br, 0x00FFAA, local_viz_msg_);
 
   // The control iteration goes here. 
   // Feel free to make helper functions to structure the control appropriately.
@@ -214,37 +209,39 @@ void Navigation::Run() {
   Vector2f closest_point;
   Vector2f clearance_point;
   for (auto& path : path_options) {
-    min_clearance = 4;
     free_path_length = std::numeric_limits<float>::max();
     closest_point = point_cloud_pred[0];
-    clearance_point = point_cloud_pred[0];
+    min_clearance = 4;
+    clearance_point = closest_point;
+
     for (auto& point : point_cloud_pred) {
       distance = distance_to_collision(path.curvature, point);
+      
       if (distance < free_path_length) {
         free_path_length = distance;
         closest_point = point;
       }
     }
+
     for (auto& point : point_cloud_pred) {
       float angle = fmod(atan2(point[0],-path.side*point[1]+path.radius)+2*M_PI, 2*M_PI);
-      //std::cout << angle << "\n";
+
       if (angle < abs(path.curvature*free_path_length)) {
-        clearance = abs((point-Vector2f(0,path.side*path.radius)).norm() - path.radius);
+        clearance = abs((point-Vector2f(0., path.side*path.radius)).norm() - path.radius);
         if (clearance < min_clearance) {
           min_clearance = clearance;
           clearance_point = point;
-          //std::cout << angle << " ";
         }
       }
     }
-    //std::cout << "\n" << min_clearance << "\n\n";
+
     path.add_collision_data(free_path_length, closest_point, min_clearance, clearance_point);
   }
 
   // Visualize arcs
   for (auto& path : path_options) {
     if (path.curvature == 0) {
-      visualization::DrawLine(Vector2f(0, 0), Vector2f(path.free_path_length, 0), 0xfca903, local_viz_msg_);
+      visualization::DrawLine(Vector2f(0., 0.), Vector2f(path.free_path_length, 0.), 0xfca903, local_viz_msg_);
     } else {
       int side = (2 * (path.curvature > 0) - 1) * (path.curvature != 0);
       Eigen::Vector2f center = Vector2f(0, 1/path.curvature);
@@ -265,7 +262,6 @@ void Navigation::Run() {
               local_viz_msg_);
     }
   }
-  //std::cout << "\n\n";
 
   // Experimental
   Eigen::Vector2f closest_barrier_point = point_cloud_pred[0];
@@ -282,13 +278,15 @@ void Navigation::Run() {
     }
   }
 
-  // TODO: Select the "best" curvature
+  // Select the "best" curvature
   Path best_path = path_options[0];
   float min_loss = best_path.rate_path1(goal_point, closest_barrier_point);
   float loss;
+
   for (auto& path : path_options) {
     loss = path.rate_path1(goal_point, closest_barrier_point);
     //printf("Path %f %f %f %f \n", path.curvature, path.free_path_length, path.closest_point[1], loss);
+    
     if (loss < min_loss) {
       min_loss = loss;
       best_path = path;
@@ -298,30 +296,34 @@ void Navigation::Run() {
   drive_msg_.curvature = best_path.curvature;
 
   // TOC
-  // Either drive max speed or 0 speed
   drive_msg_.velocity = FLAGS_max_speed;
+
+  // Distance it takes the robot to stop if it's driving full speed
   double max_distance_to_stop = pow(drive_msg_.velocity, 2)/(2*FLAGS_max_deceleration);
 
+  // Distance it takes the robot to stop if it's driving at the current speed
   double distance_to_stop = pow(std::max(odom_vel, vel_pred), 2)/(2*FLAGS_max_deceleration);
 
-  float goal_point_dist = goal_point.x() + goal_point.y();
-
-  float stop = std::min(goal_point_dist, best_path.free_path_length);
+  // Distance till robot needs to stop
+  float stop = std::min(goal_point.norm(), best_path.free_path_length);
 
   if (stop <= distance_to_stop) {
-    // We need to stop because we are about to reach the goal point
+    // Robot needs to stop
     if (odom_vel!=0. && vel_pred!=0.){
       printf("%f %f\n", odom_vel, vel_pred);
     }
     drive_msg_.velocity = 0;
   } else if (stop <= max_distance_to_stop) {
+    // Robot shouldn't accelerate nor decelerate
     if (odom_vel != 0. && vel_pred != 0.){
       printf("%f %f %f \n", odom_vel, vel_pred, distance_to_stop);
     }
     
     // printf("Close!, distance_to_stop: %f, free_path_length: %f\n\n",distance_to_stop, best_path.free_path_length);
-    drive_msg_.velocity = std::min(odom_vel, vel_pred)*.9;
+    drive_msg_.velocity = std::min(odom_vel, vel_pred) * .9;
+    
     if (drive_msg_.velocity <= .0001){
+      // Trucate speed to 0 
       drive_msg_.velocity = 0;
     }
   }
@@ -330,7 +332,7 @@ void Navigation::Run() {
   // TOC for collision detection
 
   // shift previous values
-  for(int i=8;i>=0;i--){
+  for(int i = 8; i >= 0; i--){
     previous_vel_[i+1] = previous_vel_[i];
     previous_curv_[i+1] = previous_curv_[i];
   }

@@ -90,13 +90,9 @@ class Navigation {
 
   // Previous velocity commands
   std::array<double, 10> previous_vel_;
-  // Previous velocity measurements
-  std::array<double, 10> previous_vel_m;
 
   // Previous curvature commands
   std::array<double, 10> previous_curv_;
-  // Previous curvature measurements
-  std::array<double, 10> previous_curv_m;
 };
 
 }  // namespace navigation

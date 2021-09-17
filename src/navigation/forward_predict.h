@@ -32,15 +32,14 @@ void forwardPredict(std::vector<Vector2f> &point_cloud_pred, float &vel_pred, fl
 
     if (previous_curv_[i] == 0.) {
       // Driving straight
-      rel_loc_pred[0] = rel_loc_pred[0] + cos(rel_angle_pred)*arc_distance_pred;
-      rel_loc_pred[1] = rel_loc_pred[1] + sin(rel_angle_pred)*arc_distance_pred;
+      rel_loc_pred += Vector2f(cos(rel_angle_pred), sin(rel_angle_pred)) * arc_distance_pred;
     } else {
       // Turning
       double del_rel_angle_pred = arc_distance_pred * previous_curv_[i];
       double radius = 1/abs(previous_curv_[i]);
       int side = (0 < previous_curv_[i]) - (previous_curv_[i] < 0);
-      Eigen::Vector2f del_rel_loc_pred = Vector2f(radius * sin(abs(del_rel_angle_pred)), 
-                                                  side * (radius - radius * cos(abs(del_rel_angle_pred))));
+      Eigen::Vector2f del_rel_loc_pred = Vector2f(sin(abs(del_rel_angle_pred)), 
+                                                  side * (1 - cos(abs(del_rel_angle_pred)))) * radius;
 
       // Rotation matrix
       Eigen::Rotation2Df r1(rel_angle_pred);
@@ -61,7 +60,7 @@ void forwardPredict(std::vector<Vector2f> &point_cloud_pred, float &vel_pred, fl
   for (uint i = 0; i < point_cloud_pred.size(); i++) {
     Eigen::Vector2f pt = point_cloud_pred[i];
     pt = pt - rel_loc_pred;
-    pt = R*pt;
+    pt = R * pt;
 
     point_cloud_pred[i] = pt;
   }
