@@ -8,12 +8,14 @@ using Eigen::Vector2f;
 #ifndef FORWARD_PREDICT_H
 #define FORWARD_PREDICT_H
 
+using namespace navigation;
+
 DEFINE_int32(sensing_latency, 0, "Robot sensing latency in periods of 1/20th sec");
 DEFINE_int32(actuation_latency, 0, "Robot actuation latency in periods of 1/20th sec");
 
 namespace forward_predict {
 
-void forwardPredict(std::vector<Vector2f> &point_cloud_pred, float &vel_pred, float &rel_angle_pred, Vector2f &rel_loc_pred, std::array<double, 10> previous_vel_, std::array<double, 10> previous_curv_, Vector2f &goal_point_pred) {
+void forwardPredict(std::vector<Vector2f> &point_cloud_pred, float &vel_pred, float &rel_angle_pred, Vector2f &rel_loc_pred, std::array<double, COMMAND_MEMORY_LENGTH> previous_vel_, std::array<double, COMMAND_MEMORY_LENGTH> previous_curv_, Vector2f &goal_point_pred) {
 
   int total_latency = FLAGS_actuation_latency + FLAGS_sensing_latency;
   int actuation_latency = FLAGS_actuation_latency;

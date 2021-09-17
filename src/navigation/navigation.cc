@@ -330,7 +330,7 @@ void Navigation::Run() {
   // TOC for collision detection
 
   // shift previous values
-  for(int i = 8; i >= 0; i--){
+  for(int i = COMMAND_MEMORY_LENGTH-2; i >= 0; i--){
     previous_vel_[i+1] = previous_vel_[i];
     previous_curv_[i+1] = previous_curv_[i];
   }

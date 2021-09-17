@@ -32,6 +32,8 @@ namespace ros {
 
 namespace navigation {
 
+const int COMMAND_MEMORY_LENGTH = 20;
+
 class Navigation {
  public:
 
@@ -89,10 +91,10 @@ class Navigation {
   float nav_goal_angle_;
 
   // Previous velocity commands
-  std::array<double, 10> previous_vel_;
+  std::array<double, COMMAND_MEMORY_LENGTH> previous_vel_;
 
   // Previous curvature commands
-  std::array<double, 10> previous_curv_;
+  std::array<double, COMMAND_MEMORY_LENGTH> previous_curv_;
 };
 
 }  // namespace navigation
