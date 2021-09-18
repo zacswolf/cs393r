@@ -11,8 +11,8 @@ DEFINE_double(max_speed, 1., "The max speed");
 
 DEFINE_double(length, .32385, "The wheel base of the robot");
 DEFINE_double(width, .2286, "The track width of the robot");
-DEFINE_double(del_length, .088075 + .1, "The length margin of the robot");
-DEFINE_double(del_width, .0254 + .1, "The width margin of the robot");
+DEFINE_double(del_length, .088075 + .075, "The length margin of the robot");
+DEFINE_double(del_width, .0254 + .025, "The width margin of the robot");
 // DEFINE_double(safety_margin, .15, "The safety margin for the robot");
 
 #ifndef COLLISION_H
@@ -26,7 +26,7 @@ bool is_inner_collision(double radius_pt, double radius_inner_back, double radiu
 }
 
 bool is_front_collision(double radius_pt, double radius_inner_front, double radius_outer_front) {
-  return (radius_pt > radius_inner_front && radius_pt < radius_outer_front);
+  return (radius_pt > radius_inner_front && radius_pt < radius_outer_front) ;
 }
 
 bool is_outer_collision(double radius_pt, double radius_outer_front, double radius_outer_back) {
@@ -41,29 +41,20 @@ bool is_straight_collision(Vector2f pt) {
 // Distance to collision
 double dist_to_collision_inner(double radius_car, int side, double radius_pt, Vector2f pt) {
   double theta_car = acos((radius_car - FLAGS_width/2 - FLAGS_del_width)/radius_pt);
-  double theta_point = atan2(pt[0], radius_car - side*pt[1]);
-  if (theta_point < 0) {
-    theta_point = theta_point + 2*M_PI;
-  }
-  return std::max((theta_point - theta_car) * radius_car,0.);
+  double theta_point = fmod(atan2(pt[0], radius_car - side*pt[1]) + 2*M_PI, 2*M_PI);
+  return std::max(fmod(theta_point - theta_car + 2*M_PI, 2*M_PI) * radius_car,0.);
 }
 
-double dist_to_collision_front(double radius_car, int side, double radius_pt, Vector2f pt) {
+double dist_to_collision_front(double radius_car, int side, double radius_pt, Vector2f pt, double curvature) {
   double theta_car = asin((FLAGS_length + FLAGS_del_length)/radius_pt);
-  double theta_point = atan2(pt[0], radius_car - side*pt[1]);
-  if (theta_point < 0) {
-    theta_point = theta_point + 2*M_PI;
-  }
-  return std::max((theta_point - theta_car) * radius_car,0.);
+  double theta_point = fmod(atan2(pt[0], radius_car - side*pt[1]) + 2*M_PI, 2*M_PI);
+  return std::max(fmod(theta_point - theta_car + 2*M_PI, 2*M_PI) * radius_car,0.);
 }
 
 double dist_to_collision_outer(double radius_car, int side, double radius_pt, Vector2f pt) {
   double theta_car = acos((radius_car + FLAGS_width/2 + FLAGS_del_width)/radius_pt);
-  double theta_point = atan2(pt[0], radius_car + side*pt[1]);
-  if (theta_point < 0) {
-    theta_point = theta_point + 2 * M_PI;
-  }
-  return std::max((theta_point - theta_car) * radius_car, 0.);
+  double theta_point = fmod(atan2(pt[0], radius_car - side*pt[1]) + 2*M_PI, 2*M_PI);
+  return std::max(fmod(theta_point - theta_car + 2*M_PI, 2*M_PI) * radius_car, 0.);
 }
 
 // big boi, returns max if no collison 
@@ -98,7 +89,7 @@ double distance_to_collision(double curvature, Vector2f pt) {
     if (is_inner_collision(radius_pt, radius_inner_back, radius_inner_front)) {
       return dist_to_collision_inner(radius_car, side, radius_pt, pt);
     } else if (is_front_collision(radius_pt, radius_inner_front, radius_outer_front)) {
-      return dist_to_collision_front(radius_car, side, radius_pt, pt);
+      return dist_to_collision_front(radius_car, side, radius_pt, pt, curvature);
     } else if (is_outer_collision(radius_pt, radius_outer_front, radius_outer_back)) {
       return dist_to_collision_outer(radius_car, side, radius_pt, pt);
     } else {

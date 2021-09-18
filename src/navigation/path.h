@@ -63,20 +63,20 @@ class Path {
   float rate_path1(const Vector2f& goal_point, Vector2f& closest_barrier_point, float previous_curv) {
     float barrier_penalty = 0;
     if (closest_barrier_point[0] > -FLAGS_del_length && closest_barrier_point[0] < FLAGS_length + FLAGS_del_length && abs(closest_barrier_point[1]) < FLAGS_width/2 + FLAGS_del_width) {
-      this->free_path_length = 0.;
+      //this->free_path_length = 0.;
       barrier_penalty = this->curvature/closest_point[1];
-      printf("Collision!");
+      printf("Collision!\n");
     }
 
     float clearance_penalty = 0;
     if (this->clearance < FLAGS_width/2 + FLAGS_del_width + FLAGS_min_clearance) {
-      clearance_penalty = 1;
+      clearance_penalty = .001 / std::min(abs(this->clearance - FLAGS_width/2 - FLAGS_del_width), .001);
       //printf("Avoiding close clearance!");
     }
     int previous_side = (0 < previous_curv) - (previous_curv < 0);
     int side_penalty = previous_side ^= this->side;
 
-    return -this->free_path_length + 0.01*abs(this->curvature) + 100*clearance_penalty + 0*barrier_penalty + 0.1*side_penalty;
+    return -this->free_path_length + 0.01*abs(this->curvature) + 100*clearance_penalty + 0*barrier_penalty + 0.05*side_penalty;
     //return 300*this->free_path_length * (this->free_path_length < .03) + 0 * 1/this->free_path_length + 1. * this->point_to_path_dist(goal_point);
   }
 };

@@ -164,13 +164,13 @@ void Navigation::Run() {
   // Sample n curvatures
   vector<Path> path_options;
 
-  for (float curvature = -1.; curvature <= -1./64.; curvature *= 0.5) {
+  for (float curvature = -1.; curvature <= -1./64.; curvature *= 0.75) {
     Path path = Path(curvature);
     path.curvature = curvature;
     path_options.push_back(path);
   }
 
-  for (float curvature = 1.; curvature >= 1./64.; curvature *= 0.5) {
+  for (float curvature = 1.; curvature >= 1./64.; curvature *= 0.75) {
     Path path = Path(curvature);
     path.curvature = curvature;
     path_options.push_back(path);
@@ -201,13 +201,18 @@ void Navigation::Run() {
     }
 
     for (auto& point : point_cloud_pred) {
-      arc_angle_to_point = fmod(atan2(point[0], -path.side*point[1] + path.radius) + 2*M_PI, 2*M_PI);
+      
+      if (free_path_length == 0.) {
+        min_clearance = 0;
+      } else {
+        arc_angle_to_point = fmod(atan2(point[0], -path.side*point[1] + path.radius) + 2*M_PI, 2*M_PI);
 
-      if (arc_angle_to_point < abs(path.curvature*free_path_length)) {
-        clearance = abs((point - Vector2f(0., path.side*path.radius)).norm() - path.radius);
-        if (clearance < min_clearance) {
-          min_clearance = clearance;
-          clearance_point = point;
+        if (arc_angle_to_point < abs(path.curvature*free_path_length)) {
+          clearance = abs((point - Vector2f(0., path.side*path.radius)).norm() - path.radius);
+          if (clearance < min_clearance) {
+            min_clearance = clearance;
+            clearance_point = point;
+          }
         }
       }
     }
@@ -274,7 +279,6 @@ void Navigation::Run() {
 
   for (auto& path : path_options) {
     loss = path.rate_path1(goal_point_pred, closest_barrier_point, previous_curv_[0]);
-    //printf("Path %f %f %f %f \n", path.curvature, path.free_path_length, path.closest_point[1], loss);
     
     if (loss < min_loss) {
       min_loss = loss;
@@ -300,6 +304,9 @@ void Navigation::Run() {
   // Distance till robot needs to stop
   // TODO: This only works when the goal point is strictly in front of the car
   float stop = std::min(goal_point_pred.norm() * (goal_point_pred[0] > 0), best_path.free_path_length);
+
+  //printf("%.3f %.3f %.3f %.3f\n", best_path.curvature, best_path.free_path_length, stop, distance_to_stop_after_accel);
+
   
   if (stop > distance_to_stop_after_accel) {
     // not decelerating
