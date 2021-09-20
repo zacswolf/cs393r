@@ -50,7 +50,11 @@ using namespace collision;
 using namespace forward_predict;
 
 // Create command line arguments
-DEFINE_double(p1_local_coords, 6., "The goal for P1");
+DEFINE_double(p1_local_coords, 400., "The goal for P1");
+DEFINE_double(clearance_drop_off, .1, "The clearance drop off, use 0 for normal clearance");
+
+DEFINE_int32(path_selection_algo, 0, "Choose which path selection algo to use");
+
 
 namespace {
 ros::Publisher drive_pub_;
@@ -74,6 +78,7 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
     nav_complete_(true),
     nav_goal_loc_(0, 0),
     nav_goal_angle_(0) {
+  printf("Start Navigation Init\n");
   drive_pub_ = n->advertise<AckermannCurvatureDriveMsg>(
       "ackermann_curvature_drive", 1);
   viz_pub_ = n->advertise<VisualizationMsg>("visualization", 1);
@@ -85,6 +90,7 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
 
   std::fill(std::begin(previous_vel_), std::end(previous_vel_), 0.);
   std::fill(std::begin(previous_curv_), std::end(previous_curv_), 0.);
+  printf("End Navigation Init\n");
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
@@ -164,26 +170,34 @@ void Navigation::Run() {
   // Sample n curvatures
   vector<Path> path_options;
 
-  for (float curvature = -1.; curvature <= -1./64.; curvature *= 0.75) {
-    Path path = Path(curvature);
-    path.curvature = curvature;
-    path_options.push_back(path);
-  }
-
-  for (float curvature = 1.; curvature >= 1./64.; curvature *= 0.75) {
-    Path path = Path(curvature);
-    path.curvature = curvature;
-    path_options.push_back(path);
+  if (FLAGS_path_selection_algo == 0){
+    for (float curvature = 1.; curvature >= 1./64.; curvature *= 0.85) {
+      Path path = Path(curvature);
+      path_options.push_back(path);
+      Path path2 = Path(-curvature);
+      path_options.push_back(path2);
+    }
+  } else {
+    for (float curvature = 1.; curvature >= 1./64.; curvature -= (1./32)) {
+        Path path = Path(curvature);
+        path_options.push_back(path);
+        Path path2 = Path(-curvature);
+        path_options.push_back(path2);
+    }
   }
 
   // Get Metrics on all curves
   float distance;
-  float clearance;
+
   float free_path_length;
-  float min_clearance;
   Vector2f closest_point;
-  Vector2f clearance_point;
+
   float arc_angle_to_point;
+  float clearance_fpl;
+
+  float min_clearance;
+  float clearance;
+  Vector2f clearance_point;
   
   for (auto& path : path_options) {
     free_path_length = std::numeric_limits<float>::max();
@@ -208,7 +222,10 @@ void Navigation::Run() {
         arc_angle_to_point = fmod(atan2(point[0], -path.side*point[1] + path.radius) + 2*M_PI, 2*M_PI);
 
         if (arc_angle_to_point < abs(path.curvature*free_path_length)) {
-          clearance = abs((point - Vector2f(0., path.side*path.radius)).norm() - path.radius);
+          clearance_fpl = arc_angle_to_point * path.radius;
+          clearance = abs((point - Vector2f(0., path.side*path.radius)).norm() - path.radius) *
+                      (FLAGS_clearance_drop_off * clearance_fpl + 1);
+
           if (clearance < min_clearance) {
             min_clearance = clearance;
             clearance_point = point;
@@ -274,11 +291,11 @@ void Navigation::Run() {
 
   // Select the "best" curvature
   Path best_path = path_options[0];
-  float min_loss = best_path.rate_path1(goal_point_pred, closest_barrier_point, previous_curv_[0]);
+  float min_loss = best_path.rate_path(goal_point_pred, closest_barrier_point, previous_curv_[0]);
   float loss;
 
   for (auto& path : path_options) {
-    loss = path.rate_path1(goal_point_pred, closest_barrier_point, previous_curv_[0]);
+    loss = path.rate_path(goal_point_pred, closest_barrier_point, previous_curv_[0]);
     
     if (loss < min_loss) {
       min_loss = loss;

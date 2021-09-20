@@ -162,6 +162,7 @@ int main(int argc, char** argv) {
   ros::Subscriber goto_sub =
       n.subscribe("/move_base_simple/goal", 1, &GoToCallback);
 
+  printf("Nav main start run loop\n");
   RateLoop loop(20.0);
   while (run_ && ros::ok()) {
     ros::spinOnce();

@@ -6,7 +6,18 @@
 using namespace navigation;
 using Eigen::Vector2f;
 
-DEFINE_double(min_clearance, .2, "The min clearance");
+DEFINE_double(min_clearance, .02, "The min clearance, this accounts for lidar noise");
+DEFINE_int32(rate_path, 1, "The min clearance");
+
+DEFINE_double(fpl_mult, 1.2, "The free path length multiplier");
+DEFINE_double(curvature_mult, 1, "The curvature multiplier");
+DEFINE_double(side_mult, 1, "The side change multiplier");
+
+DEFINE_double(clearance_mult1, 0, "The d-1 poly clearance multiplier");
+DEFINE_double(clearance_mult2, .000355, "The d-2 poly clearance multiplier");
+
+
+
 
 #ifndef PATH_H
 #define PATH_H
@@ -28,8 +39,8 @@ class Path {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
   
   Path(float curvature) : curvature(curvature) {
-    this->radius = (curvature==0)? 0 : 1/abs(curvature);
-    this->side = (0 < curvature) - (curvature < 0);
+    this->radius = (curvature == 0.)? 0. : 1./abs(curvature);
+    this->side = (0. < curvature) - (curvature < 0.);
   }
 
   float point_to_path_dist(const Vector2f& goal_point) {
@@ -60,24 +71,30 @@ class Path {
     this->clearance_point = clearance_point;
   }
 
-  float rate_path1(const Vector2f& goal_point, Vector2f& closest_barrier_point, float previous_curv) {
-    float barrier_penalty = 0;
+  float rate_path(const Vector2f& goal_point, Vector2f& closest_barrier_point, float previous_curv) {
     if (closest_barrier_point[0] > -FLAGS_del_length && closest_barrier_point[0] < FLAGS_length + FLAGS_del_length && abs(closest_barrier_point[1]) < FLAGS_width/2 + FLAGS_del_width) {
-      //this->free_path_length = 0.;
-      barrier_penalty = this->curvature/closest_point[1];
       printf("Collision!\n");
     }
 
-    float clearance_penalty = 0;
-    if (this->clearance < FLAGS_width/2 + FLAGS_del_width + FLAGS_min_clearance) {
-      clearance_penalty = .001 / std::min(abs(this->clearance - FLAGS_width/2 - FLAGS_del_width), .001);
-      //printf("Avoiding close clearance!");
+    float clearance_to_side = std::min(0., this->clearance - FLAGS_width/2 - FLAGS_del_width);
+    float clearance_penalty;
+    if (clearance_to_side <= FLAGS_min_clearance) {
+      // Dont use this path as lidar noise could cause a collision with the safety margin
+      clearance_penalty = 100;
+    } else {
+      clearance_penalty = (FLAGS_clearance_mult2 / pow(clearance_to_side, 2)) + (FLAGS_clearance_mult1 / clearance_to_side);
     }
+
     int previous_side = (0 < previous_curv) - (previous_curv < 0);
     int side_penalty = previous_side ^= this->side;
 
-    return -this->free_path_length + 0.01*abs(this->curvature) + 100*clearance_penalty + 0*barrier_penalty + 0.05*side_penalty;
-    //return 300*this->free_path_length * (this->free_path_length < .03) + 0 * 1/this->free_path_length + 1. * this->point_to_path_dist(goal_point);
+    float neg_free_path_length_norm = (-1./8) * this->free_path_length;
+
+    if (FLAGS_rate_path == 0) {
+      return FLAGS_fpl_mult*(neg_free_path_length_norm) + FLAGS_curvature_mult*(1./800)*abs(this->curvature) + clearance_penalty + FLAGS_side_mult*(1./160)*side_penalty;
+    } else {
+      return (-1./8)*this->free_path_length + (1./800)*abs(this->curvature) + (100./8)*clearance_penalty + (1./160)*side_penalty;
+    }
   }
 };
 
