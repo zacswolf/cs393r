@@ -323,7 +323,7 @@ void Navigation::Run() {
   
   if (stop > distance_to_stop_after_accel) {
     // Not decelerating
-    drive_msg_.velocity = std::min(FLAGS_max_acceleration/20 + vel_pred, FLAGS_max_speed);
+    drive_msg_.velocity = std::min(vel_pred + FLAGS_max_acceleration/20., FLAGS_max_speed);
   } else {
     drive_msg_.velocity = std::max(vel_pred - FLAGS_max_deceleration/20., 0.);
   }
