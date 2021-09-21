@@ -50,7 +50,12 @@ using namespace collision;
 using namespace forward_predict;
 
 // Create command line arguments
-DEFINE_double(p1_local_coords, 6., "The goal for P1");
+DEFINE_double(p1_local_coords, 400., "The goal for P1");
+
+DEFINE_int32(path_sample_algo, 0, "Choose which path sampling algo to use");
+
+DEFINE_double(clearance_drop_off, .1, "The clearance drop off, use 0 for normal clearance");
+
 
 namespace {
 ros::Publisher drive_pub_;
@@ -74,6 +79,7 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
     nav_complete_(true),
     nav_goal_loc_(0, 0),
     nav_goal_angle_(0) {
+  printf("Start Navigation Init\n");
   drive_pub_ = n->advertise<AckermannCurvatureDriveMsg>(
       "ackermann_curvature_drive", 1);
   viz_pub_ = n->advertise<VisualizationMsg>("visualization", 1);
@@ -85,6 +91,7 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
 
   std::fill(std::begin(previous_vel_), std::end(previous_vel_), 0.);
   std::fill(std::begin(previous_curv_), std::end(previous_curv_), 0.);
+  printf("End Navigation Init\n");
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
@@ -156,34 +163,43 @@ void Navigation::Run() {
   float vel_pred = odom_vel;
   forwardPredict(point_cloud_pred, vel_pred, rel_angle_pred, rel_loc_pred, previous_vel_, previous_curv_, goal_point_pred);
   
+  // Draw forward predicted goal point
   visualization::DrawCross(goal_point_pred, .5, 0x555555, local_viz_msg_);
-
-  // printf("rel_loc_pred %f %f\n", rel_loc_pred[0], rel_loc_pred[1]);
+  
+  // Draw forward predicted robot location
   visualization::DrawCross(rel_loc_pred, .5, 0x031cfc, local_viz_msg_);
 
-  // Sample n curvatures
+  // Sample curvatures
   vector<Path> path_options;
 
-  for (float curvature = -1.; curvature <= -1./64.; curvature *= 0.75) {
-    Path path = Path(curvature);
-    path.curvature = curvature;
-    path_options.push_back(path);
-  }
-
-  for (float curvature = 1.; curvature >= 1./64.; curvature *= 0.75) {
-    Path path = Path(curvature);
-    path.curvature = curvature;
-    path_options.push_back(path);
+  if (FLAGS_path_sample_algo == 0){
+    for (float curvature = 1.; curvature >= 1./64.; curvature *= 0.85) {
+      Path path = Path(curvature);
+      path_options.push_back(path);
+      Path path2 = Path(-curvature);
+      path_options.push_back(path2);
+    }
+  } else {
+    for (float curvature = 1.; curvature >= 1./64.; curvature -= (1./32)) {
+        Path path = Path(curvature);
+        path_options.push_back(path);
+        Path path2 = Path(-curvature);
+        path_options.push_back(path2);
+    }
   }
 
   // Get Metrics on all curves
   float distance;
-  float clearance;
+
   float free_path_length;
-  float min_clearance;
   Vector2f closest_point;
-  Vector2f clearance_point;
+
   float arc_angle_to_point;
+  float clearance_fpl;
+
+  float min_clearance;
+  float clearance;
+  Vector2f clearance_point;
   
   for (auto& path : path_options) {
     free_path_length = std::numeric_limits<float>::max();
@@ -191,6 +207,7 @@ void Navigation::Run() {
     min_clearance = 4;
     clearance_point = closest_point;
 
+    // Free path length and closest point
     for (auto& point : point_cloud_pred) {
       distance = distance_to_collision(path.curvature, point);
       
@@ -200,15 +217,22 @@ void Navigation::Run() {
       }
     }
 
+    // Clearance
     for (auto& point : point_cloud_pred) {
-      
+
       if (free_path_length == 0.) {
         min_clearance = 0;
       } else {
         arc_angle_to_point = fmod(atan2(point[0], -path.side*point[1] + path.radius) + 2*M_PI, 2*M_PI);
 
+        // TODO: Make Clearance work with a 0 curvature
         if (arc_angle_to_point < abs(path.curvature*free_path_length)) {
-          clearance = abs((point - Vector2f(0., path.side*path.radius)).norm() - path.radius);
+          clearance_fpl = arc_angle_to_point * path.radius;
+          
+          // TODO: Change this to use the inner or outer most radius
+          clearance = abs((point - Vector2f(0., path.side*path.radius)).norm() - path.radius) *
+                      (FLAGS_clearance_drop_off * clearance_fpl + 1);
+
           if (clearance < min_clearance) {
             min_clearance = clearance;
             clearance_point = point;
@@ -217,6 +241,7 @@ void Navigation::Run() {
       }
     }
 
+    // Add metrics to the path
     path.add_collision_data(free_path_length, closest_point, min_clearance, clearance_point);
   }
 
@@ -252,6 +277,7 @@ void Navigation::Run() {
     }
   }
 
+  // TODO: @Andrew what is this, should we delete it? - Zac
   // Experimental
   Eigen::Vector2f closest_barrier_point = point_cloud_pred[0];
   float dx;
@@ -274,11 +300,11 @@ void Navigation::Run() {
 
   // Select the "best" curvature
   Path best_path = path_options[0];
-  float min_loss = best_path.rate_path1(goal_point_pred, closest_barrier_point, previous_curv_[0]);
+  float min_loss = best_path.rate_path(goal_point_pred, closest_barrier_point, previous_curv_[0]);
   float loss;
 
   for (auto& path : path_options) {
-    loss = path.rate_path1(goal_point_pred, closest_barrier_point, previous_curv_[0]);
+    loss = path.rate_path(goal_point_pred, closest_barrier_point, previous_curv_[0]);
     
     if (loss < min_loss) {
       min_loss = loss;
@@ -289,37 +315,21 @@ void Navigation::Run() {
   drive_msg_.curvature = best_path.curvature;
 
   // TOC
-
-  // Distance it takes the robot to stop if it's driving full speed
-  // double max_distance_to_stop = pow(FLAGS_max_speed, 2)/(2*FLAGS_max_deceleration);
-
-  // Distance it takes the robot to stop if it's driving at the current speed
-  // double distance_to_stop = pow(vel_pred, 2)/(2*FLAGS_max_deceleration);
-
   double distance_to_stop_after_accel = .05 * (vel_pred + .5*FLAGS_max_acceleration*.05) + pow(vel_pred + FLAGS_max_acceleration/20, 2)/(2*FLAGS_max_deceleration);
-  // (vel_pred + (vel_pred + FLAGS_max_acceleration/20.)) / (2. * 20.) + pow(vel_pred + FLAGS_max_acceleration/20, 2)/(2*FLAGS_max_deceleration);
-  //std::max(odom_vel, vel_pred)
   
-
   // Distance till robot needs to stop
   // TODO: This only works when the goal point is strictly in front of the car
   float stop = std::min(goal_point_pred.norm() * (goal_point_pred[0] > 0), best_path.free_path_length);
-
-  //printf("%.3f %.3f %.3f %.3f\n", best_path.curvature, best_path.free_path_length, stop, distance_to_stop_after_accel);
-
   
   if (stop > distance_to_stop_after_accel) {
-    // not decelerating
-    drive_msg_.velocity = std::min(FLAGS_max_acceleration/20 + vel_pred, FLAGS_max_speed);
+    // Not decelerating
+    drive_msg_.velocity = std::min(vel_pred + FLAGS_max_acceleration/20., FLAGS_max_speed);
   } else {
-    // Robot needs to stop
-    // if (odom_vel != 0. && vel_pred != 0.){
-    //   printf("%f %f\n", odom_vel, vel_pred);
-    // }
     drive_msg_.velocity = std::max(vel_pred - FLAGS_max_deceleration/20., 0.);
   }
 
-  // shift previous values
+
+  // Shift previous values, for forward predict
   for(int i = COMMAND_MEMORY_LENGTH-2; i >= 0; i--){
     previous_vel_[i+1] = previous_vel_[i];
     previous_curv_[i+1] = previous_curv_[i];
