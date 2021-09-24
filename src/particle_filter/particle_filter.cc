@@ -70,46 +70,62 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
                                             float angle_max,
                                             vector<Vector2f>* scan_ptr) {
   vector<Vector2f>& scan = *scan_ptr;
+  scan.resize(num_ranges);
+
   // Compute what the predicted point cloud would be, if the car was at the pose
   // loc, angle, with the sensor characteristics defined by the provided
   // parameters.
   // This is NOT the motion model predict step: it is the prediction of the
   // expected observations, to be used for the update step.
+  const Eigen::Rotation2Df rotation(angle);
+  const Vector2f kLaserLoc(0.2, 0); // Relative to car
+  const Vector2f kLaserLoc_m = loc + rotation * kLaserLoc; // relative to map
 
-  // Note: The returned values must be set using the `scan` variable:
-  scan.resize(num_ranges);
-  // Fill in the entries of scan using array writes, e.g. scan[i] = ...
-  for (size_t i = 0; i < scan.size(); ++i) {
-    scan[i] = Vector2f(0, 0);
+  vector<line2f> rays(num_ranges); // Relative to map
+  float ray_angle = angle_min; // Relative to car
+  const float ray_increment = (angle_max - angle_min)/(num_ranges-1);
+
+  // Populate rays with the lines for each lidar measurement
+  for (int i = 0; i < num_ranges; i++) {
+    // TODO: Check math, especially the sign of angle
+    // TODO: Clean up
+
+    // Relative to the car
+    Vector2f start = Vector2f(range_min * cos(ray_angle), range_min * sin(ray_angle)) + kLaserLoc;
+    Vector2f end = Vector2f(range_max * cos(ray_angle), range_max * sin(ray_angle)) + kLaserLoc;
+
+    // Relative to the map
+    start = loc + rotation * start;
+    end = loc + rotation * end;
+
+    rays[i] = line2f(start, end);
+
+    ray_angle += ray_increment;
   }
+  
 
-  // The line segments in the map are stored in the `map_.lines` variable. You
-  // can iterate through them as:
-  for (size_t i = 0; i < map_.lines.size(); ++i) {
-    const line2f map_line = map_.lines[i];
-    // The line2f class has helper functions that will be useful.
-    // You can create a new line segment instance as follows, for :
-    line2f my_line(1, 2, 3, 4); // Line segment from (1,2) to (3.4).
-    // Access the end points using `.p0` and `.p1` members:
-    printf("P0: %f, %f P1: %f,%f\n", 
-           my_line.p0.x(),
-           my_line.p0.y(),
-           my_line.p1.x(),
-           my_line.p1.y());
+  // Find closest intersection point for each ray
+  for (size_t i = 0; i < rays.size(); i++) {
+    const line2f ray_line = rays[i];
 
-    // Check for intersections:
-    bool intersects = map_line.Intersects(my_line);
-    // You can also simultaneously check for intersection, and return the point
-    // of intersection:
-    Vector2f intersection_point; // Return variable
-    intersects = map_line.Intersection(my_line, &intersection_point);
-    if (intersects) {
-      printf("Intersects at %f,%f\n", 
-             intersection_point.x(),
-             intersection_point.y());
-    } else {
-      printf("No intersection\n");
+    Vector2f closest_point;
+    double closest_point_dist = std::numeric_limits<float>::max();
+
+    // Compare each ray to each line in the map
+    for (size_t j = 0; j < map_.lines.size(); j++) {
+      const line2f map_line = map_.lines[i];
+
+      Vector2f intersection_point; 
+      const bool intersects = ray_line.Intersection(map_line, &intersection_point);
+
+      // rel to map -> rel to lidar
+      intersection_point = intersection_point - kLaserLoc_m;
+      if (intersects && intersection_point.norm() < closest_point_dist) {
+        closest_point = intersection_point;
+        closest_point_dist = intersection_point.norm();
+      }
     }
+    scan[i] = closest_point;
   }
 }
 
@@ -151,6 +167,7 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
                                   float angle_max) {
   // A new laser scan observation is available (in the laser frame)
   // Call the Update and Resample steps as necessary.
+  printf("angle_min %f\tangle_max %f\n", angle_min, angle_max);
 }
 
 void ParticleFilter::Predict(const Vector2f& odom_loc,
