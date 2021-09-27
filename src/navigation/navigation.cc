@@ -277,34 +277,13 @@ void Navigation::Run() {
     }
   }
 
-  // TODO: @Andrew what is this, should we delete it? - Zac
-  // Experimental
-  Eigen::Vector2f closest_barrier_point = point_cloud_pred[0];
-  float dx;
-  float dy;
-  float side_to_point_distance;
-
-  float min_distance = std::numeric_limits<float>::max();
-  for (auto& pt : point_cloud_pred) {
-    dx = std::max(std::max(-FLAGS_del_length - pt[0], 0.), pt[0] - (FLAGS_length + FLAGS_del_length));
-    dy = std::max(std::max(-(FLAGS_width/2 + FLAGS_del_width) - pt[1], 0.), pt[1] - (FLAGS_width/2 + FLAGS_del_width));
-    
-    // Relative to side of the car
-    side_to_point_distance = sqrt(dx*dx + dy*dy);
-
-    if (side_to_point_distance < min_distance) {
-      closest_barrier_point = pt;
-      min_distance = side_to_point_distance;
-    }
-  }
-
   // Select the "best" curvature
   Path best_path = path_options[0];
-  float min_loss = best_path.rate_path(goal_point_pred, closest_barrier_point, previous_curv_[0]);
+  float min_loss = best_path.rate_path(goal_point_pred, previous_curv_[0]);
   float loss;
 
   for (auto& path : path_options) {
-    loss = path.rate_path(goal_point_pred, closest_barrier_point, previous_curv_[0]);
+    loss = path.rate_path(goal_point_pred, previous_curv_[0]);
     
     if (loss < min_loss) {
       min_loss = loss;
