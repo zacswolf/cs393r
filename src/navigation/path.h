@@ -71,11 +71,7 @@ class Path {
     this->clearance_point = clearance_point;
   }
 
-  float rate_path(const Vector2f& goal_point, Vector2f& closest_barrier_point, float previous_curv) {
-    if (closest_barrier_point[0] > -FLAGS_del_length && closest_barrier_point[0] < FLAGS_length + FLAGS_del_length && abs(closest_barrier_point[1]) < FLAGS_width/2 + FLAGS_del_width) {
-      printf("Collision!\n");
-    }
-
+  float rate_path(const Vector2f& goal_point, float previous_curv) {
     float clearance_to_side = std::min(0., this->clearance - FLAGS_width/2 - FLAGS_del_width);
     float clearance_penalty;
     if (clearance_to_side <= FLAGS_min_clearance) {

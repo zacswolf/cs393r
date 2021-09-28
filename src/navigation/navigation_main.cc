@@ -99,9 +99,7 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
     range = msg.ranges[i];
     if (range >= msg.range_min && range <= msg.range_max) {
       angle = msg.angle_min + i * msg.angle_increment;
-      laser_loc(0) = range * cos(angle);
-      laser_loc(1) = range * sin(angle);
-      laser_loc = laser_loc + kLaserLoc;
+      laser_loc = Vector2f(range * cos(angle), range * sin(angle)) + kLaserLoc;
       point_cloud_.push_back(laser_loc);
     }
   }
