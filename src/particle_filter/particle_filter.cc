@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
 #include "gflags/gflags.h"
@@ -30,6 +31,7 @@
 #include "shared/math/line2d.h"
 #include "shared/math/math_util.h"
 #include "shared/util/timer.h"
+
 
 #include "config_reader/config_reader.h"
 #include "particle_filter.h"
@@ -42,11 +44,21 @@ using std::endl;
 using std::string;
 using std::swap;
 using std::vector;
+using std::numeric_limits;
 using Eigen::Vector2f;
 using Eigen::Vector2i;
 using vector_map::VectorMap;
 
 DEFINE_double(num_particles, 50, "Number of particles");
+
+DEFINE_double(sd_predict_x, .1, "Std Dev of local x error");
+DEFINE_double(sd_predict_y, .05, "Std Dev of local y error");
+DEFINE_double(sd_predict_angle, 0.1*M_PI/180, "Std Dev of angle error");
+
+DEFINE_double(gamma, 1./20., "Gamma: LIDAR correlation coefficient");
+DEFINE_double(sd_laser, 0.002, "Std Dev");
+
+DEFINE_int32(loc_algo, 0, "Localization algorithm (0 = mode, 1 = mean)");
 
 namespace particle_filter {
 
@@ -55,7 +67,10 @@ config_reader::ConfigReader config_reader_({"config/particle_filter.lua"});
 ParticleFilter::ParticleFilter() :
     prev_odom_loc_(0, 0),
     prev_odom_angle_(0),
-    odom_initialized_(false) {}
+    odom_initialized_(false) {
+      particles_.resize(FLAGS_num_particles);
+      resample_counter_ = 0;
+    }
 
 void ParticleFilter::GetParticles(vector<Particle>* particles) const {
   *particles = particles_;
@@ -109,11 +124,11 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
     const line2f ray_line = rays[i];
 
     Vector2f closest_point;
-    double closest_point_dist = std::numeric_limits<float>::max();
+    double closest_point_dist = numeric_limits<float>::max();
 
     // Compare each ray to each line in the map
     for (size_t j = 0; j < map_.lines.size(); j++) {
-      const line2f map_line = map_.lines[i];
+      const line2f map_line = map_.lines[j];
 
       Vector2f intersection_point; 
       const bool intersects = ray_line.Intersection(map_line, &intersection_point);
@@ -140,6 +155,58 @@ void ParticleFilter::Update(const vector<float>& ranges,
   // observations for each particle, and assign weights to the particles based
   // on the observation likelihood computed by relating the observation to the
   // predicted point cloud.
+
+  const int num_ranges = ranges.size(); //TODO: Verify that the size of this doesnt change
+  assert(num_ranges == 1081);
+
+  double max_log_weight = numeric_limits<double>::min();
+
+  // Determine log weights
+  for (auto& particle : particles_) {
+    vector<Vector2f> scan;
+
+    GetPredictedPointCloud(particle.loc, particle.angle, num_ranges, range_min, range_max, angle_min, angle_max, &scan);
+    
+    // Convert GetPredictedPointCloud to ranges
+    vector<double> scan_range(scan.size());
+    for (uint i = 0; i < scan.size(); i++) {
+      scan_range[i] = scan[i].norm();
+    }
+
+    // TODO: robust weighting
+    // Compare the scan_range to ranges
+    double sum = 0.;
+    uint num_used_ranges = 0;
+    for (uint i = 0; i < scan.size(); i++) {
+      if (scan_range[i] < range_max && scan_range[i] > range_min && ranges[i] < range_max && ranges[i] > range_min) {
+        sum += pow((scan_range[i] - ranges[i]) / FLAGS_sd_laser, 2);
+        num_used_ranges++;
+      } // TODO: Maybe add case where scan_range valid xor range valid
+    }
+
+    // Note: in inconsistent state 
+    particle.weight = -FLAGS_gamma * sum;
+
+    // Find max particle log weight
+    if (particle.weight > max_log_weight) {
+      max_log_weight = particle.weight;
+    }
+  }
+
+  // Convert log weights to non-absolute weights
+  double weight_sum = 0; // Only used if FLAGS_loc_algo != 0
+  for (auto& particle : particles_) {
+    particle.weight -= max_log_weight;
+    particle.weight = exp(particle.weight);
+    weight_sum += particle.weight;
+  }
+
+  // Normalize weights
+  if (FLAGS_loc_algo) {
+    for (auto& particle : particles_) {
+      particle.weight /= weight_sum;
+    }
+  }
 }
 
 void ParticleFilter::Resample() {
@@ -147,7 +214,7 @@ void ParticleFilter::Resample() {
   // The current particles are in the `particles_` variable. 
   // Create a variable to store the new particles, and when done, replace the
   // old set of particles:
-  // vector<Particle> new_particles';
+  // vector<Particle> new_particles;
   // During resampling: 
   //    new_particles.push_back(...)
   // After resampling:
@@ -155,9 +222,40 @@ void ParticleFilter::Resample() {
 
   // You will need to use the uniform random number generator provided. For
   // example, to generate a random number between 0 and 1:
-  float x = rng_.UniformRandom(0, 1);
-  printf("Random number drawn from uniform distribution between 0 and 1: %f\n",
-         x);
+
+  vector<Particle> new_particles;
+  // (1) prefix sum the weights: ps = [0, w_1, ..., sum (0<=i<N) v_i]
+  // (2) sample rand (r) from 0, ps[-1] 
+  // (3) BS ps for i where ps[i] > r and ps[i-1] < r
+  // (4) goto (2) [alt: low-variance sampling]
+
+  // Compute prefix sum
+  vector<double> prefix_sum(particles_.size() + 1);
+  prefix_sum[0] = 0.;
+  for (uint i = 1; i < prefix_sum.size(); i++){
+    prefix_sum[i] = prefix_sum[i-1] + particles_[i-1].weight;
+  }
+
+  // Random sample
+  for (uint i = 0; i < particles_.size(); i++) {
+    double rand = rng_.UniformRandom(0, prefix_sum[particles_.size() + 1]);
+
+    // Find index of prefix_sum where ps[j-1] < r && ps[j] > r
+    // TODO: Binary Search?
+    for (uint j = 1; j < prefix_sum.size(); j++) {
+      if (prefix_sum[j] >= rand) {
+        new_particles.push_back(particles_[j-1]);
+        new_particles[i].weight = 1./particles_.size();
+        break;
+      }
+    }
+  }
+
+  assert(new_particles.size() == particles_.size());
+  
+  // Update particles
+  particles_ = new_particles;
+
 }
 
 void ParticleFilter::ObserveLaser(const vector<float>& ranges,
@@ -167,7 +265,12 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
                                   float angle_max) {
   // A new laser scan observation is available (in the laser frame)
   // Call the Update and Resample steps as necessary.
-  printf("angle_min %f\tangle_max %f\n", angle_min, angle_max);
+
+  Update(ranges, range_min, range_max, angle_min, angle_max, nullptr);
+  if (resample_counter_ == 0){
+    Resample();
+  }
+  resample_counter_ = (resample_counter_ + 1) % 15;
 }
 
 void ParticleFilter::Predict(const Vector2f& odom_loc,
@@ -181,9 +284,18 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   // You will need to use the Gaussian random number generator provided. For
   // example, to generate a random number from a Gaussian with mean 0, and
   // standard deviation 2:
-  float x = rng_.Gaussian(0.0, 2.0);
-  printf("Random number drawn from Gaussian distribution with 0 mean and "
-         "standard deviation of 2 : %f\n", x);
+
+  
+  Vector2f delt_loc = odom_loc - prev_odom_loc_;
+  float delt_angle = odom_angle - prev_odom_angle_;
+
+  Eigen::Rotation2Df r1(-prev_odom_angle_); // rotate odom -> local_prev
+
+  for (auto& particle : particles_) {
+    Eigen::Rotation2Df r2(particle.angle); // rotate local_prev -> map
+    particle.loc += r2*(r1*delt_loc + Vector2f(rng_.Gaussian(0., FLAGS_sd_predict_x), rng_.Gaussian(0., FLAGS_sd_predict_y)));
+    particle.angle += delt_angle + rng_.Gaussian(0., FLAGS_sd_predict_angle);
+  }
 }
 
 void ParticleFilter::Initialize(const string& map_file,
@@ -193,6 +305,17 @@ void ParticleFilter::Initialize(const string& map_file,
   // was received from the log. Initialize the particles accordingly, e.g. with
   // some distribution around the provided location and angle.
   map_.Load(map_file);
+
+
+  particles_.resize(FLAGS_num_particles);
+  for (auto& particle : particles_) {
+    Vector2f loc_offset = Vector2f(rng_.UniformRandom(-0.005, 0.005), rng_.UniformRandom(-0.005, 0.005));
+    float ang_offset = rng_.UniformRandom(-M_PI/80,M_PI/80);
+    particle.loc = loc + loc_offset;
+    particle.angle = angle + ang_offset;
+    particle.weight = 1./FLAGS_num_particles;
+  }
+
 }
 
 void ParticleFilter::GetLocation(Eigen::Vector2f* loc_ptr, 
@@ -202,9 +325,31 @@ void ParticleFilter::GetLocation(Eigen::Vector2f* loc_ptr,
   // Compute the best estimate of the robot's location based on the current set
   // of particles. The computed values must be set to the `loc` and `angle`
   // variables to return them. Modify the following assignments:
-  loc = Vector2f(0, 0);
-  angle = 0;
-}
+  
+  if (!FLAGS_loc_algo) {
+    // MODE: ie return particle with highest weight
+    Particle mode_particle{Vector2f(0.,0.), 0., 0.};
+    for (auto& particle : particles_) {
+      if (particle.weight > mode_particle.weight) {
+        mode_particle = particle;
+      }
+    }
+    
+    loc = mode_particle.loc;
+    angle = mode_particle.angle;
+  } else {
+    // MEAN: ie return weighted average of loc and angle
+    // NOTE: Requires weights to be normalized
+    loc = Vector2f(0.,0.);
+    Vector2f angle_iq = Vector2f(0., 0.);
 
+    for (uint i = 0; i < particles_.size(); i++) {
+      loc += particles_[i].loc * particles_[i].weight;
+      angle_iq = angle_iq + Vector2f(cos(particles_[i].angle), sin(particles_[i].angle)) * particles_[i].weight;
+    }
+
+    angle = atan2(angle_iq[1], angle_iq[0]);
+  }
+}
 
 }  // namespace particle_filter

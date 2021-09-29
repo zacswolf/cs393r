@@ -99,9 +99,11 @@ class ParticleFilter {
   util_random::Random rng_;
 
   // Previous odometry-reported locations.
-  Eigen::Vector2f prev_odom_loc_;
-  float prev_odom_angle_;
+  Eigen::Vector2f prev_odom_loc_; // Relative to Odom
+  float prev_odom_angle_; // Relative to Odom
   bool odom_initialized_;
+  uint resample_counter_;
+
 };
 }  // namespace slam
 
