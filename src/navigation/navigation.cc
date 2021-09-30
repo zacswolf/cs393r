@@ -230,8 +230,31 @@ void Navigation::Run() {
           clearance_fpl = arc_angle_to_point * path.radius;
           
           // TODO: Change this to use the inner or outer most radius
-          clearance = abs((point - Vector2f(0., path.side*path.radius)).norm() - path.radius) *
-                      (FLAGS_clearance_drop_off * clearance_fpl + 1);
+          // clearance = abs((point - Vector2f(0., path.side*path.radius)).norm() - path.radius) *
+          //            (FLAGS_clearance_drop_off * clearance_fpl + 1);
+
+          int side = (0 < path.curvature) - (path.curvature < 0);
+          double radius_pt = (point - Vector2f(0., path.side*path.radius)).norm();
+
+          double radius_left_back = sqrt(pow(path.radius - side*(FLAGS_width/2. + FLAGS_del_width), 2) + pow(FLAGS_del_length, 2));
+          double radius_right_back = sqrt(pow(path.radius + side*(FLAGS_width/2. + FLAGS_del_width), 2) + pow(FLAGS_del_length, 2));
+          double radius_left_front = sqrt(pow(path.radius - side*(FLAGS_width/2. + FLAGS_del_width), 2) + pow(FLAGS_length + FLAGS_del_length, 2));
+          double radius_right_front = sqrt(pow(path.radius + side*(FLAGS_width/2. + FLAGS_del_width), 2) + pow(FLAGS_length + FLAGS_del_length, 2));
+
+          double radius_inner_back  = (side == 1) * radius_left_back   + (side == -1) * radius_right_back;
+          // double radius_inner_front = (side == 1) * radius_left_front  + (side == -1) * radius_right_front;
+          // double radius_outer_back  = (side == 1) * radius_right_back  + (side == -1) * radius_left_back;
+          double radius_outer_front = (side == 1) * radius_right_front + (side == -1) * radius_left_front;
+
+          if (radius_pt < radius_inner_back) {
+            clearance = abs(radius_inner_back - radius_pt);
+          } else if (radius_pt > radius_outer_front) {
+            clearance = abs(radius_pt - radius_outer_front);
+          } else {
+            clearance = 0;
+          }
+
+          clearance = clearance * (FLAGS_clearance_drop_off * clearance_fpl + 1);
 
           if (clearance < min_clearance) {
             min_clearance = clearance;
