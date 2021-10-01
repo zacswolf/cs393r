@@ -124,7 +124,7 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
     const line2f ray_line = rays[i];
 
     Vector2f closest_point;
-    double closest_point_dist = numeric_limits<float>::max();
+    double closest_point_dist = 100.; //numeric_limits<float>::max();
 
     // Compare each ray to each line in the map
     for (size_t j = 0; j < map_.lines.size(); j++) {
@@ -159,7 +159,7 @@ void ParticleFilter::Update(const vector<float>& ranges,
   const int num_ranges = ranges.size(); //TODO: Verify that the size of this doesnt change
   assert(num_ranges == 1081);
 
-  double max_log_weight = numeric_limits<double>::min();
+  double max_log_weight = -1000000.;numeric_limits<double>::lowest();
 
   // Determine log weights
   for (auto& particle : particles_) {
@@ -179,22 +179,24 @@ void ParticleFilter::Update(const vector<float>& ranges,
     uint num_used_ranges = 0;
     for (uint i = 0; i < scan.size(); i++) {
       if (scan_range[i] < range_max && scan_range[i] > range_min && ranges[i] < range_max && ranges[i] > range_min) {
-        sum += pow((scan_range[i] - ranges[i]) / FLAGS_sd_laser, 2);
+        sum += pow((scan_range[i] - ranges[i]) / FLAGS_sd_laser, 2.);
         num_used_ranges++;
       } // TODO: Maybe add case where scan_range valid xor range valid
     }
 
     // Note: in inconsistent state 
     particle.weight = -FLAGS_gamma * sum;
-
+    std::cout << particle.weight << " ";
     // Find max particle log weight
     if (particle.weight > max_log_weight) {
       max_log_weight = particle.weight;
     }
   }
 
+  std::cout << "\n";
+
   // Convert log weights to non-absolute weights
-  double weight_sum = 0; // Only used if FLAGS_loc_algo != 0
+  double weight_sum = 0.; // Only used if FLAGS_loc_algo != 0
   for (auto& particle : particles_) {
     particle.weight -= max_log_weight;
     particle.weight = exp(particle.weight);
@@ -244,8 +246,9 @@ void ParticleFilter::Resample() {
     // TODO: Binary Search?
     for (uint j = 1; j < prefix_sum.size(); j++) {
       if (prefix_sum[j] >= rand) {
-        new_particles.push_back(particles_[j-1]);
-        new_particles[i].weight = 1./particles_.size();
+        new_particles.push_back(Particle{Vector2f(particles_[j-1].loc[0], particles_[j-1].loc[1]), particles_[j-1].angle, 1./particles_.size()});
+        // new_particles.push_back(particles_[j-1]);
+        // new_particles[i].weight = 1./particles_.size();
         break;
       }
     }
@@ -267,7 +270,8 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
   // Call the Update and Resample steps as necessary.
 
   Update(ranges, range_min, range_max, angle_min, angle_max, nullptr);
-  if (resample_counter_ == 0){
+
+  if (resample_counter_ == 0) {
     Resample();
   }
   resample_counter_ = (resample_counter_ + 1) % 15;
@@ -285,7 +289,12 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   // example, to generate a random number from a Gaussian with mean 0, and
   // standard deviation 2:
 
-  
+  if (!odom_initialized_){
+    prev_odom_loc_ = odom_loc;
+    prev_odom_angle_ = odom_angle;
+    odom_initialized_ = true;
+  }
+
   Vector2f delt_loc = odom_loc - prev_odom_loc_;
   float delt_angle = odom_angle - prev_odom_angle_;
 
@@ -296,6 +305,9 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
     particle.loc += r2*(r1*delt_loc + Vector2f(rng_.Gaussian(0., FLAGS_sd_predict_x), rng_.Gaussian(0., FLAGS_sd_predict_y)));
     particle.angle += delt_angle + rng_.Gaussian(0., FLAGS_sd_predict_angle);
   }
+
+  prev_odom_angle_ = odom_angle;
+  prev_odom_loc_ = odom_loc;
 }
 
 void ParticleFilter::Initialize(const string& map_file,
@@ -310,12 +322,13 @@ void ParticleFilter::Initialize(const string& map_file,
   particles_.resize(FLAGS_num_particles);
   for (auto& particle : particles_) {
     Vector2f loc_offset = Vector2f(rng_.UniformRandom(-0.005, 0.005), rng_.UniformRandom(-0.005, 0.005));
-    float ang_offset = rng_.UniformRandom(-M_PI/80,M_PI/80);
+    float ang_offset = rng_.UniformRandom(-M_PI/80., M_PI/80.);
     particle.loc = loc + loc_offset;
     particle.angle = angle + ang_offset;
-    particle.weight = 1./FLAGS_num_particles;
+    particle.weight = 1./(double)FLAGS_num_particles;
   }
 
+  odom_initialized_ = false;
 }
 
 void ParticleFilter::GetLocation(Eigen::Vector2f* loc_ptr, 
@@ -328,19 +341,20 @@ void ParticleFilter::GetLocation(Eigen::Vector2f* loc_ptr,
   
   if (!FLAGS_loc_algo) {
     // MODE: ie return particle with highest weight
-    Particle mode_particle{Vector2f(0.,0.), 0., 0.};
+    Particle mode_particle{Vector2f(0., 0.), 0., 0.};
     for (auto& particle : particles_) {
       if (particle.weight > mode_particle.weight) {
         mode_particle = particle;
       }
+      std::cout << particle.weight << " ";
     }
-    
+    std::cout << "\n\n";
     loc = mode_particle.loc;
     angle = mode_particle.angle;
   } else {
     // MEAN: ie return weighted average of loc and angle
     // NOTE: Requires weights to be normalized
-    loc = Vector2f(0.,0.);
+    loc = Vector2f(0., 0.);
     Vector2f angle_iq = Vector2f(0., 0.);
 
     for (uint i = 0; i < particles_.size(); i++) {
