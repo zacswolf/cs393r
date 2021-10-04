@@ -72,7 +72,8 @@ class Path {
   }
 
   float rate_path(const Vector2f& goal_point, float previous_curv) {
-    float clearance_to_side = std::min(0., this->clearance - FLAGS_width/2 - FLAGS_del_width);
+    //float clearance_to_side = std::min(0., this->clearance - FLAGS_width/2 - FLAGS_del_width);
+    float clearance_to_side = this->clearance;
     float clearance_penalty;
     if (clearance_to_side <= FLAGS_min_clearance) {
       // Dont use this path as lidar noise could cause a collision with the safety margin
