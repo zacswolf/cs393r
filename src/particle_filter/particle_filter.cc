@@ -53,12 +53,18 @@ DEFINE_double(num_particles, 50, "Number of particles");
 
 DEFINE_double(sd_predict_x, .1, "Std Dev of local x error");
 DEFINE_double(sd_predict_y, .05, "Std Dev of local y error");
-DEFINE_double(sd_predict_angle, 0.1*M_PI/180, "Std Dev of angle error");
+DEFINE_double(sd_predict_angle, 0.1, "Std Dev of angle error in degrees");
 
 DEFINE_double(gamma, 1./20., "Gamma: LIDAR correlation coefficient");
-DEFINE_double(sd_laser, 0.002, "Std Dev");
+DEFINE_double(sd_laser, 0.5, "Std Dev");
 
-DEFINE_int32(loc_algo, 0, "Localization algorithm (0 = mode, 1 = mean)");
+DEFINE_int32(loc_algo, 1, "Localization algorithm (0 = mode, 1 = mean)");
+
+
+DEFINE_int32(debug_pf, 0, "Debug");
+
+DEFINE_double(update_distance, .15, "Distance in meters that robot should move before calling update");
+DEFINE_double(update_angle, 5., "Angle in degrees that robot should move before calling update");
 
 namespace particle_filter {
 
@@ -67,9 +73,10 @@ config_reader::ConfigReader config_reader_({"config/particle_filter.lua"});
 ParticleFilter::ParticleFilter() :
     prev_odom_loc_(0, 0),
     prev_odom_angle_(0),
-    odom_initialized_(false) {
+    odom_initialized_(false), 
+    odom_update_initialized_(false),
+    resampled_last_update_(false) {
       particles_.resize(FLAGS_num_particles);
-      resample_counter_ = 0;
     }
 
 void ParticleFilter::GetParticles(vector<Particle>* particles) const {
@@ -186,14 +193,12 @@ void ParticleFilter::Update(const vector<float>& ranges,
 
     // Note: in inconsistent state 
     particle.weight = -FLAGS_gamma * sum;
-    std::cout << particle.weight << " ";
+    
     // Find max particle log weight
     if (particle.weight > max_log_weight) {
       max_log_weight = particle.weight;
     }
   }
-
-  std::cout << "\n";
 
   // Convert log weights to non-absolute weights
   double weight_sum = 0.; // Only used if FLAGS_loc_algo != 0
@@ -207,8 +212,11 @@ void ParticleFilter::Update(const vector<float>& ranges,
   if (FLAGS_loc_algo) {
     for (auto& particle : particles_) {
       particle.weight /= weight_sum;
+      std::cout << particle.weight << " ";
     }
   }
+
+  std::cout << "\n\n";
 }
 
 void ParticleFilter::Resample() {
@@ -230,6 +238,17 @@ void ParticleFilter::Resample() {
   // (2) sample rand (r) from 0, ps[-1] 
   // (3) BS ps for i where ps[i] > r and ps[i-1] < r
   // (4) goto (2) [alt: low-variance sampling]
+  
+  if (FLAGS_debug_pf) {
+    
+    for (int dy = -1; dy <= 1; dy += 0.1) {
+      for (int dx = -1; dx <= 1; dx += 0.1) {
+        for (int dtheta = -1; dtheta <= 1; dtheta += 0.1) {
+          //new_particles.push_back(Particle{Vector2f(particles_[j-1].loc[0], particles_[j-1].loc[1]), particles_[j-1].angle, 1./particles_.size()});
+        }
+      }
+    }
+  }
 
   // Compute prefix sum
   vector<double> prefix_sum(particles_.size() + 1);
@@ -240,7 +259,7 @@ void ParticleFilter::Resample() {
 
   // Random sample
   for (uint i = 0; i < particles_.size(); i++) {
-    double rand = rng_.UniformRandom(0, prefix_sum[particles_.size() + 1]);
+    double rand = rng_.UniformRandom(0, prefix_sum[prefix_sum.size() -1]);
 
     // Find index of prefix_sum where ps[j-1] < r && ps[j] > r
     // TODO: Binary Search?
@@ -269,12 +288,20 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
   // A new laser scan observation is available (in the laser frame)
   // Call the Update and Resample steps as necessary.
 
-  Update(ranges, range_min, range_max, angle_min, angle_max, nullptr);
-
-  if (resample_counter_ == 0) {
-    Resample();
+  if (!odom_update_initialized_ || (prev_update_odom_loc_ - prev_odom_loc_).norm() >= FLAGS_update_distance || abs(prev_update_odom_angle_ - prev_odom_angle_) >= FLAGS_update_angle * M_PI / 180.) {
+    // Update only when robot has changed by a threshold
+    Update(ranges, range_min, range_max, angle_min, angle_max, nullptr);
+    
+    prev_update_odom_loc_ = prev_odom_loc_;
+    prev_update_odom_angle_ = prev_odom_angle_;
+    odom_update_initialized_ = true;
+    
+    if (!resampled_last_update_) {
+      // Resample every other update
+      Resample();
+    }
+    resampled_last_update_ = !resampled_last_update_;
   }
-  resample_counter_ = (resample_counter_ + 1) % 15;
 }
 
 void ParticleFilter::Predict(const Vector2f& odom_loc,
@@ -303,7 +330,7 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   for (auto& particle : particles_) {
     Eigen::Rotation2Df r2(particle.angle); // rotate local_prev -> map
     particle.loc += r2*(r1*delt_loc + Vector2f(rng_.Gaussian(0., FLAGS_sd_predict_x), rng_.Gaussian(0., FLAGS_sd_predict_y)));
-    particle.angle += delt_angle + rng_.Gaussian(0., FLAGS_sd_predict_angle);
+    particle.angle += delt_angle + rng_.Gaussian(0., FLAGS_sd_predict_angle*M_PI/180.);
   }
 
   prev_odom_angle_ = odom_angle;
@@ -329,6 +356,8 @@ void ParticleFilter::Initialize(const string& map_file,
   }
 
   odom_initialized_ = false;
+  odom_update_initialized_ = false;
+  resampled_last_update_ = false;
 }
 
 void ParticleFilter::GetLocation(Eigen::Vector2f* loc_ptr, 
