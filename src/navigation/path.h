@@ -7,7 +7,7 @@ using namespace navigation;
 using Eigen::Vector2f;
 
 DEFINE_double(min_clearance, .02, "The min clearance, this accounts for lidar noise");
-DEFINE_int32(rate_path, 1, "The min clearance");
+DEFINE_int32(rate_path, 0, "The rate path algo to use");
 
 DEFINE_double(fpl_mult, 1.2, "The free path length multiplier");
 DEFINE_double(curvature_mult, 1, "The curvature multiplier");
