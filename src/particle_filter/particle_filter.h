@@ -108,6 +108,7 @@ class ParticleFilter {
 
   bool odom_update_initialized_;
   bool resampled_last_update_;
+  uint resample_counter;
 
 };
 }  // namespace slam
