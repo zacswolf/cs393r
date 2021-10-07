@@ -49,16 +49,24 @@ using Eigen::Vector2f;
 using Eigen::Vector2i;
 using vector_map::VectorMap;
 using math_util::DegToRad;
+using math_util::RadToDeg;
 using math_util::AngleDiff;
 
 DEFINE_double(num_particles, 50, "Number of particles");
 
 DEFINE_double(sd_predict_x, .1, "Std Dev of local x error");
 DEFINE_double(sd_predict_y, .05, "Std Dev of local y error");
-DEFINE_double(sd_predict_angle, 0.1, "Std Dev of angle error in degrees");
+DEFINE_double(sd_predict_angle, 0.3, "Std Dev of angle error in degrees");
 
-DEFINE_double(gamma, 1./20., "Gamma: LIDAR correlation coefficient");
-DEFINE_double(sd_laser, 0.5, "Std Dev");
+DEFINE_double(sd_x_from_dist, .2, "Std Dev of local x error from translation");
+DEFINE_double(sd_y_from_dist, .05, "Std Dev of local y error from translation");
+DEFINE_double(sd_ang_from_dist, 20.0, "Std Dev of angle error in degrees from translation");
+DEFINE_double(sd_x_from_rot, 0., "Std Dev of local x error from rotation");
+DEFINE_double(sd_y_from_rot, 0., "Std Dev of local y error from rotation");
+DEFINE_double(sd_ang_from_rot, 1.0, "Std Dev of angle error in degrees from rotation");
+
+DEFINE_double(gamma, 0.5, "Gamma: LIDAR correlation coefficient");
+DEFINE_double(sd_laser, 0.25, "Std Dev");
 
 DEFINE_double(robust_min_sd, 1., "Num std dev for robust cutoff min");
 DEFINE_double(robust_max_sd, 3., "Num std dev for robust cutoff max");
@@ -319,21 +327,21 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
   // A new laser scan observation is available (in the laser frame)
   // Call the Update and Resample steps as necessary.
 
-  // uint num_ranges = ranges.size();
-  // const vector<float> new_ranges;
-  // uint range_index = 0;
-  // for (range_index = 0; range_index < ranges.size(); range_index += ranges.size()/FLAGS_num_lasers) {
-  //   new_ranges.push_back(ranges[range_index]);
-  // }
+  uint num_ranges = ranges.size();
+  vector<float> new_ranges;
+  uint range_index = 0;
+  for (range_index = 0; range_index < ranges.size(); range_index += ranges.size()/FLAGS_num_lasers) {
+    new_ranges.push_back(ranges[range_index]);
+  }
 
-  // range_index -= ranges.size()/FLAGS_num_lasers;
+  range_index -= ranges.size()/FLAGS_num_lasers;
   
-  // const float ray_increment = (angle_max - angle_min)/(num_ranges-1);
-  // angle_max = angle_min + ray_increment*range_index;
+  const float ray_increment = (angle_max - angle_min)/(num_ranges-1);
+  angle_max = angle_min + ray_increment*range_index;
 
   if (odom_update_initialized_ || (prev_update_odom_loc_ - prev_odom_loc_).norm() >= FLAGS_update_distance || abs(prev_update_odom_angle_ - prev_odom_angle_) >= FLAGS_update_angle * M_PI / 180.) {
     // Update only when robot has changed by a threshold
-    Update(ranges, range_min, range_max, angle_min, angle_max, nullptr);
+    Update(new_ranges, range_min, range_max, angle_min, angle_max, nullptr);
     
     prev_update_odom_loc_ = prev_odom_loc_;
     prev_update_odom_angle_ = prev_odom_angle_;
@@ -372,8 +380,11 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
 
   for (auto& particle : particles_) {
     Eigen::Rotation2Df r2(particle.angle); // rotate local_prev -> map
-    particle.loc += r2*(r1*delt_loc + Vector2f(rng_.Gaussian(0., FLAGS_sd_predict_x), rng_.Gaussian(0., FLAGS_sd_predict_y)));
-    particle.angle += delt_angle + rng_.Gaussian(0., DegToRad(FLAGS_sd_predict_angle));
+    float sd_x = FLAGS_sd_x_from_dist * delt_loc.norm() + FLAGS_sd_x_from_rot * RadToDeg(abs(delt_angle));
+    float sd_y = FLAGS_sd_y_from_dist * delt_loc.norm() + FLAGS_sd_y_from_rot * RadToDeg(abs(delt_angle));
+    float sd_ang = DegToRad(FLAGS_sd_ang_from_dist * delt_loc.norm()) + DegToRad(FLAGS_sd_ang_from_rot * RadToDeg(abs(delt_angle)));
+    particle.loc += r2*(r1*delt_loc + Vector2f(rng_.Gaussian(0., sd_x), rng_.Gaussian(0., sd_y)));
+    particle.angle += delt_angle + rng_.Gaussian(0., sd_ang);
   }
 
   prev_odom_angle_ = odom_angle;
