@@ -66,7 +66,7 @@ DEFINE_double(sd_y_from_rot, 0., "Std Dev of local y error from rotation");
 DEFINE_double(sd_ang_from_rot, 1.0, "Std Dev of angle error in degrees from rotation");
 
 DEFINE_double(gamma, 0.5, "Gamma: LIDAR correlation coefficient");
-DEFINE_double(sd_laser, 0.25, "Std Dev");
+DEFINE_double(sd_laser, 0.15, "Std Dev");
 
 DEFINE_double(robust_min_sd, 1., "Num std dev for robust cutoff min");
 DEFINE_double(robust_max_sd, 3., "Num std dev for robust cutoff max");
@@ -76,7 +76,7 @@ DEFINE_int32(robust, 1, "Use robust observation");
 DEFINE_int32(debug_pf, 0, "Debug");
 
 DEFINE_double(update_distance, .15, "Distance in meters that robot should move before calling update");
-DEFINE_double(update_angle, 5., "Angle in degrees that robot should move before calling update");
+DEFINE_double(update_angle, 1., "Angle in degrees that robot should move before calling update");
 
 DEFINE_int32(resample_algo, 1, "The resample algorithm to use, 0 for default, 1 for low variance");
 
