@@ -60,7 +60,7 @@ DEFINE_double(sd_predict_angle, 0.3, "Std Dev of angle error in degrees");
 
 DEFINE_double(sd_x_from_dist, .2, "Std Dev of local x error from translation");
 DEFINE_double(sd_y_from_dist, .05, "Std Dev of local y error from translation");
-DEFINE_double(sd_ang_from_dist, 20.0, "Std Dev of angle error in degrees from translation");
+DEFINE_double(sd_ang_from_dist, 10.0, "Std Dev of angle error in degrees from translation");
 DEFINE_double(sd_x_from_rot, 0., "Std Dev of local x error from rotation");
 DEFINE_double(sd_y_from_rot, 0., "Std Dev of local y error from rotation");
 DEFINE_double(sd_ang_from_rot, 1.0, "Std Dev of angle error in degrees from rotation");
@@ -402,8 +402,8 @@ void ParticleFilter::Initialize(const string& map_file,
 
   particles_.resize(FLAGS_num_particles);
   for (auto& particle : particles_) {
-    Vector2f loc_offset = Vector2f(rng_.UniformRandom(-0.005, 0.005), rng_.UniformRandom(-0.005, 0.005));
-    float ang_offset = rng_.UniformRandom(-M_PI/80., M_PI/80.);
+    Vector2f loc_offset = Vector2f(rng_.UniformRandom(-0.2, 0.2), rng_.UniformRandom(-0.005, 0.005));
+    float ang_offset = rng_.UniformRandom(-M_PI, M_PI);
     particle.loc = loc + loc_offset;
     particle.angle = angle + ang_offset;
     particle.weight = 1./(double)FLAGS_num_particles;
