@@ -54,6 +54,8 @@ using math_util::AngleDiff;
 using math_util::AngleMod;
 
 DEFINE_double(num_particles, 50, "Number of particles");
+DEFINE_int32(init_mode, 0, "0 to use location data from set pos, 1 to figure it out");
+DEFINE_double(num_particles_init, 1000, "Number of particles");
 
 DEFINE_double(sd_x_from_dist, .2, "Std Dev of local x error from translation");
 DEFINE_double(sd_y_from_dist, .05, "Std Dev of local y error from translation");
@@ -266,18 +268,23 @@ void ParticleFilter::Resample() {
   for (uint i = 1; i < prefix_sum.size(); i++){
     prefix_sum[i] = prefix_sum[i-1] + particles_[i-1].weight;
   }
+
+  uint num_new_particles = particles_.size();
+
+  if (FLAGS_init_mode == 1) {
+    num_new_particles = FLAGS_num_particles;
+  }
   
   if (!FLAGS_resample_algo) {
     // Regular Resampling
-    for (uint i = 0; i < particles_.size(); i++) {
+    for (uint i = 0; i < num_new_particles; i++) {
       double rand = rng_.UniformRandom(0., prefix_sum[prefix_sum.size() - 1]);
 
       // Find index of prefix_sum where ps[j-1] < r && ps[j] > r
       // TODO: Binary Search?
       for (uint j = 1; j < prefix_sum.size(); j++) {
         if (prefix_sum[j] >= rand) {
-          // TODO: Simplify
-          new_particles.push_back(Particle{Vector2f(particles_[j-1].loc), particles_[j-1].angle, 1./particles_.size()});
+          new_particles.push_back(Particle{Vector2f(particles_[j-1].loc), particles_[j-1].angle, 1./num_new_particles});
           break;
         }
       }
@@ -286,15 +293,16 @@ void ParticleFilter::Resample() {
     // Low-variance Resampling
     double sum_weights = prefix_sum[prefix_sum.size() -1];
     double sample_point = rng_.UniformRandom(0, sum_weights);
-    double delta = sum_weights/particles_.size();
+
+    double delta = sum_weights/num_new_particles;
     
-    for (uint i = 0; i < particles_.size(); i++) {
+    for (uint i = 0; i < num_new_particles; i++) {
 
       // Find index of prefix_sum where ps[j-1] < r && ps[j] > r
       // TODO: Binary Search?
       for (uint j = 1; j < prefix_sum.size(); j++) {
         if (prefix_sum[j] >= sample_point) {
-          new_particles.push_back(Particle{Vector2f(particles_[j-1].loc), particles_[j-1].angle, 1./particles_.size()});
+          new_particles.push_back(Particle{Vector2f(particles_[j-1].loc), particles_[j-1].angle, 1./num_new_particles});
           break;
         }
       }
@@ -302,7 +310,7 @@ void ParticleFilter::Resample() {
     }
   }
 
-  assert(new_particles.size() == particles_.size());
+  // assert(new_particles.size() == particles_.size());
   
   // Update particles
   particles_ = new_particles;
@@ -390,15 +398,25 @@ void ParticleFilter::Initialize(const string& map_file,
   map_.Load(map_file);
 
 
-  particles_.resize(FLAGS_num_particles);
-  for (auto& particle : particles_) {
-    Vector2f loc_offset = Vector2f(rng_.UniformRandom(-0.2, 0.2), rng_.UniformRandom(-0.005, 0.005));
-    float ang_offset = rng_.UniformRandom(-M_PI, M_PI);
-    particle.loc = loc + loc_offset;
-    particle.angle = angle + ang_offset;
-    particle.weight = 1./(double)FLAGS_num_particles;
+  if (FLAGS_init_mode == 1) {
+    particles_.resize(FLAGS_num_particles_init);
+    for (auto& particle : particles_) {
+      Vector2f loc_offset = Vector2f(rng_.UniformRandom(-10, 10), rng_.UniformRandom(-10, 10));
+      float ang_offset = rng_.UniformRandom(-M_PI, M_PI);
+      particle.loc = loc + loc_offset;
+      particle.angle = angle + ang_offset;
+      particle.weight = 1./(double)FLAGS_num_particles_init;
+    }
+  } else {
+    particles_.resize(FLAGS_num_particles);
+    for (auto& particle : particles_) {
+      Vector2f loc_offset = Vector2f(rng_.UniformRandom(-0.2, 0.2), rng_.UniformRandom(-0.005, 0.005));
+      float ang_offset = rng_.UniformRandom(-M_PI, M_PI);
+      particle.loc = loc + loc_offset;
+      particle.angle = angle + ang_offset;
+      particle.weight = 1./(double)FLAGS_num_particles;
+    }
   }
-
   odom_initialized_ = false;
   odom_update_initialized_ = false;
   resampled_last_update_ = false;
