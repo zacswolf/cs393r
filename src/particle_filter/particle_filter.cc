@@ -89,7 +89,6 @@ ParticleFilter::ParticleFilter() :
     odom_update_initialized_(false),
     resampled_last_update_(false) {
       particles_.resize(FLAGS_num_particles);
-      resample_counter = 0;
     }
 
 void ParticleFilter::GetParticles(vector<Particle>* particles) const {
@@ -408,7 +407,6 @@ void ParticleFilter::Initialize(const string& map_file,
   odom_initialized_ = false;
   odom_update_initialized_ = false;
   resampled_last_update_ = false;
-  resample_counter = 0;
 }
 
 void ParticleFilter::GetLocation(Eigen::Vector2f* loc_ptr, 
