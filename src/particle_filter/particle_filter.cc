@@ -48,23 +48,37 @@ using std::numeric_limits;
 using Eigen::Vector2f;
 using Eigen::Vector2i;
 using vector_map::VectorMap;
+using math_util::DegToRad;
+using math_util::RadToDeg;
+using math_util::AngleDiff;
+using math_util::AngleMod;
 
 DEFINE_double(num_particles, 50, "Number of particles");
+DEFINE_int32(init_mode, 0, "0 to use location data from set pos, 1 to figure it out");
+DEFINE_double(num_particles_init, 2000, "Number of particles");
 
-DEFINE_double(sd_predict_x, .1, "Std Dev of local x error");
-DEFINE_double(sd_predict_y, .05, "Std Dev of local y error");
-DEFINE_double(sd_predict_angle, 0.1, "Std Dev of angle error in degrees");
+DEFINE_double(sd_x_from_dist, .2, "Std Dev of local x error from translation");
+DEFINE_double(sd_y_from_dist, .05, "Std Dev of local y error from translation");
+DEFINE_double(sd_ang_from_dist, 10.0, "Std Dev of angle error in degrees from translation");
+DEFINE_double(sd_x_from_rot, 0., "Std Dev of local x error from rotation");
+DEFINE_double(sd_y_from_rot, 0., "Std Dev of local y error from rotation");
+DEFINE_double(sd_ang_from_rot, 1.0, "Std Dev of angle error in degrees from rotation");
 
-DEFINE_double(gamma, 1./20., "Gamma: LIDAR correlation coefficient");
-DEFINE_double(sd_laser, 0.5, "Std Dev");
+DEFINE_double(gamma, 0.5, "Gamma: LIDAR correlation coefficient");
+DEFINE_double(sd_laser, 0.15, "Std Dev");
+
+DEFINE_double(robust_min_sd, 1., "Num std dev for robust cutoff min");
+DEFINE_double(robust_max_sd, 3., "Num std dev for robust cutoff max");
 
 DEFINE_int32(loc_algo, 1, "Localization algorithm (0 = mode, 1 = mean)");
-
-
-DEFINE_int32(debug_pf, 0, "Debug");
+DEFINE_int32(robust, 1, "Use robust observation");
 
 DEFINE_double(update_distance, .15, "Distance in meters that robot should move before calling update");
-DEFINE_double(update_angle, 5., "Angle in degrees that robot should move before calling update");
+DEFINE_double(update_angle, 1., "Angle in degrees that robot should move before calling update");
+
+DEFINE_int32(resample_algo, 1, "The resample algorithm to use, 0 for default, 1 for low variance");
+
+DEFINE_int32(num_lasers, 100, "The number of lasers to use");
 
 namespace particle_filter {
 
@@ -113,8 +127,9 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
     // TODO: Clean up
 
     // Relative to the car
-    Vector2f start = Vector2f(range_min * cos(ray_angle), range_min * sin(ray_angle)) + kLaserLoc;
-    Vector2f end = Vector2f(range_max * cos(ray_angle), range_max * sin(ray_angle)) + kLaserLoc;
+    const Vector2f ray_rotation(cos(ray_angle), sin(ray_angle));
+    Vector2f start = range_min * ray_rotation + kLaserLoc;
+    Vector2f end = range_max * ray_rotation + kLaserLoc;
 
     // Relative to the map
     start = loc + rotation * start;
@@ -131,7 +146,7 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
     const line2f ray_line = rays[i];
 
     Vector2f closest_point;
-    double closest_point_dist = 100.; //numeric_limits<float>::max();
+    double closest_point_dist = numeric_limits<float>::max();
 
     // Compare each ray to each line in the map
     for (size_t j = 0; j < map_.lines.size(); j++) {
@@ -163,32 +178,44 @@ void ParticleFilter::Update(const vector<float>& ranges,
   // on the observation likelihood computed by relating the observation to the
   // predicted point cloud.
 
-  const int num_ranges = ranges.size(); //TODO: Verify that the size of this doesnt change
-  assert(num_ranges == 1081);
+  const int num_ranges = ranges.size();
 
-  double max_log_weight = -1000000.;numeric_limits<double>::lowest();
+  double max_log_weight = numeric_limits<double>::lowest();
+
+  const float robust_min_dist = -FLAGS_robust_min_sd * FLAGS_sd_laser;
+  const float robust_max_dist = FLAGS_robust_max_sd * FLAGS_sd_laser;
 
   // Determine log weights
   for (auto& particle : particles_) {
-    vector<Vector2f> scan;
+    vector<Vector2f> pred_scan;
 
-    GetPredictedPointCloud(particle.loc, particle.angle, num_ranges, range_min, range_max, angle_min, angle_max, &scan);
+    GetPredictedPointCloud(particle.loc, particle.angle, num_ranges, range_min, range_max, angle_min, angle_max, &pred_scan);
     
     // Convert GetPredictedPointCloud to ranges
-    vector<double> scan_range(scan.size());
-    for (uint i = 0; i < scan.size(); i++) {
-      scan_range[i] = scan[i].norm();
+    vector<double> pred_ranges(pred_scan.size());
+    for (uint i = 0; i < pred_scan.size(); i++) {
+      pred_ranges[i] = pred_scan[i].norm();
     }
 
     // TODO: robust weighting
-    // Compare the scan_range to ranges
+    // Compare the pred_ranges to ranges
     double sum = 0.;
     uint num_used_ranges = 0;
-    for (uint i = 0; i < scan.size(); i++) {
-      if (scan_range[i] < range_max && scan_range[i] > range_min && ranges[i] < range_max && ranges[i] > range_min) {
-        sum += pow((scan_range[i] - ranges[i]) / FLAGS_sd_laser, 2.);
-        num_used_ranges++;
-      } // TODO: Maybe add case where scan_range valid xor range valid
+
+    assert(pred_ranges.size() == ranges.size());
+
+    for (uint i = 0; i < pred_ranges.size(); i++) {
+      // Clamp the ranges to be valid
+      float pred_range = std::max(std::min((float)pred_ranges[i], range_max), range_min);
+      float scan_range = std::max(std::min((float)ranges[i], range_max), range_min);        
+
+      float dist = scan_range - pred_range;
+      if (FLAGS_robust) {
+        // Clamp distance
+        dist = std::min(std::max(dist, robust_min_dist), robust_max_dist);
+      }
+      sum += pow(dist / FLAGS_sd_laser, 2.);
+      num_used_ranges++;
     }
 
     // Note: in inconsistent state 
@@ -239,16 +266,6 @@ void ParticleFilter::Resample() {
   // (3) BS ps for i where ps[i] > r and ps[i-1] < r
   // (4) goto (2) [alt: low-variance sampling]
   
-  if (FLAGS_debug_pf) {
-    
-    for (int dy = -1; dy <= 1; dy += 0.1) {
-      for (int dx = -1; dx <= 1; dx += 0.1) {
-        for (int dtheta = -1; dtheta <= 1; dtheta += 0.1) {
-          //new_particles.push_back(Particle{Vector2f(particles_[j-1].loc[0], particles_[j-1].loc[1]), particles_[j-1].angle, 1./particles_.size()});
-        }
-      }
-    }
-  }
 
   // Compute prefix sum
   vector<double> prefix_sum(particles_.size() + 1);
@@ -257,23 +274,48 @@ void ParticleFilter::Resample() {
     prefix_sum[i] = prefix_sum[i-1] + particles_[i-1].weight;
   }
 
-  // Random sample
-  for (uint i = 0; i < particles_.size(); i++) {
-    double rand = rng_.UniformRandom(0, prefix_sum[prefix_sum.size() -1]);
+  uint num_new_particles = particles_.size();
 
-    // Find index of prefix_sum where ps[j-1] < r && ps[j] > r
-    // TODO: Binary Search?
-    for (uint j = 1; j < prefix_sum.size(); j++) {
-      if (prefix_sum[j] >= rand) {
-        new_particles.push_back(Particle{Vector2f(particles_[j-1].loc[0], particles_[j-1].loc[1]), particles_[j-1].angle, 1./particles_.size()});
-        // new_particles.push_back(particles_[j-1]);
-        // new_particles[i].weight = 1./particles_.size();
-        break;
+  if (FLAGS_init_mode == 1) {
+    num_new_particles = FLAGS_num_particles;
+  }
+  
+  if (!FLAGS_resample_algo) {
+    // Regular Resampling
+    for (uint i = 0; i < num_new_particles; i++) {
+      double rand = rng_.UniformRandom(0., prefix_sum[prefix_sum.size() - 1]);
+
+      // Find index of prefix_sum where ps[j-1] < r && ps[j] > r
+      // TODO: Binary Search?
+      for (uint j = 1; j < prefix_sum.size(); j++) {
+        if (prefix_sum[j] >= rand) {
+          new_particles.push_back(Particle{Vector2f(particles_[j-1].loc), particles_[j-1].angle, 1./num_new_particles});
+          break;
+        }
       }
+    }
+  } else {
+    // Low-variance Resampling
+    double sum_weights = prefix_sum[prefix_sum.size() -1];
+    double sample_point = rng_.UniformRandom(0, sum_weights);
+
+    double delta = sum_weights/num_new_particles;
+    
+    for (uint i = 0; i < num_new_particles; i++) {
+
+      // Find index of prefix_sum where ps[j-1] < r && ps[j] > r
+      // TODO: Binary Search?
+      for (uint j = 1; j < prefix_sum.size(); j++) {
+        if (prefix_sum[j] >= sample_point) {
+          new_particles.push_back(Particle{Vector2f(particles_[j-1].loc), particles_[j-1].angle, 1./num_new_particles});
+          break;
+        }
+      }
+      sample_point = fmod(sample_point + delta, sum_weights);
     }
   }
 
-  assert(new_particles.size() == particles_.size());
+  // assert(new_particles.size() == particles_.size());
   
   // Update particles
   particles_ = new_particles;
@@ -288,9 +330,21 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
   // A new laser scan observation is available (in the laser frame)
   // Call the Update and Resample steps as necessary.
 
-  if (!odom_update_initialized_ || (prev_update_odom_loc_ - prev_odom_loc_).norm() >= FLAGS_update_distance || abs(prev_update_odom_angle_ - prev_odom_angle_) >= FLAGS_update_angle * M_PI / 180.) {
+  uint num_ranges = ranges.size();
+  vector<float> new_ranges;
+  uint range_index = 0;
+  for (range_index = 0; range_index < ranges.size(); range_index += ranges.size()/FLAGS_num_lasers) {
+    new_ranges.push_back(ranges[range_index]);
+  }
+
+  range_index -= ranges.size()/FLAGS_num_lasers;
+  
+  const float ray_increment = (angle_max - angle_min)/(num_ranges - 1);
+  angle_max = angle_min + ray_increment*range_index;
+
+  if (odom_update_initialized_ || (prev_update_odom_loc_ - prev_odom_loc_).norm() >= FLAGS_update_distance || abs(prev_update_odom_angle_ - prev_odom_angle_) >= DegToRad(FLAGS_update_angle)) {
     // Update only when robot has changed by a threshold
-    Update(ranges, range_min, range_max, angle_min, angle_max, nullptr);
+    Update(new_ranges, range_min, range_max, angle_min, angle_max, nullptr);
     
     prev_update_odom_loc_ = prev_odom_loc_;
     prev_update_odom_angle_ = prev_odom_angle_;
@@ -323,14 +377,17 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   }
 
   Vector2f delt_loc = odom_loc - prev_odom_loc_;
-  float delt_angle = odom_angle - prev_odom_angle_;
+  float delt_angle = AngleDiff(odom_angle, prev_odom_angle_);
 
   Eigen::Rotation2Df r1(-prev_odom_angle_); // rotate odom -> local_prev
 
   for (auto& particle : particles_) {
     Eigen::Rotation2Df r2(particle.angle); // rotate local_prev -> map
-    particle.loc += r2*(r1*delt_loc + Vector2f(rng_.Gaussian(0., FLAGS_sd_predict_x), rng_.Gaussian(0., FLAGS_sd_predict_y)));
-    particle.angle += delt_angle + rng_.Gaussian(0., FLAGS_sd_predict_angle*M_PI/180.);
+    float sd_x = FLAGS_sd_x_from_dist * delt_loc.norm() + FLAGS_sd_x_from_rot * RadToDeg(abs(delt_angle));
+    float sd_y = FLAGS_sd_y_from_dist * delt_loc.norm() + FLAGS_sd_y_from_rot * RadToDeg(abs(delt_angle));
+    float sd_ang = DegToRad(FLAGS_sd_ang_from_dist * delt_loc.norm() + FLAGS_sd_ang_from_rot * RadToDeg(abs(delt_angle)));
+    particle.loc += r2*(r1*delt_loc + Vector2f(rng_.Gaussian(0., sd_x), rng_.Gaussian(0., sd_y)));
+    particle.angle = AngleMod(particle.angle + delt_angle + rng_.Gaussian(0., sd_ang));
   }
 
   prev_odom_angle_ = odom_angle;
@@ -346,15 +403,25 @@ void ParticleFilter::Initialize(const string& map_file,
   map_.Load(map_file);
 
 
-  particles_.resize(FLAGS_num_particles);
-  for (auto& particle : particles_) {
-    Vector2f loc_offset = Vector2f(rng_.UniformRandom(-0.005, 0.005), rng_.UniformRandom(-0.005, 0.005));
-    float ang_offset = rng_.UniformRandom(-M_PI/80., M_PI/80.);
-    particle.loc = loc + loc_offset;
-    particle.angle = angle + ang_offset;
-    particle.weight = 1./(double)FLAGS_num_particles;
+  if (FLAGS_init_mode == 1) {
+    particles_.resize(FLAGS_num_particles_init);
+    for (auto& particle : particles_) {
+      Vector2f loc_offset = Vector2f(rng_.Gaussian(0, 1), rng_.Gaussian(0, 1));
+      float ang_offset = rng_.Gaussian(0, M_PI/4.);
+      particle.loc = loc + loc_offset;
+      particle.angle = angle + ang_offset;
+      particle.weight = 1./(double)FLAGS_num_particles_init;
+    }
+  } else {
+    particles_.resize(FLAGS_num_particles);
+    for (auto& particle : particles_) {
+      Vector2f loc_offset = Vector2f(rng_.UniformRandom(-0.2, 0.2), rng_.UniformRandom(-0.005, 0.005));
+      float ang_offset = rng_.UniformRandom(-M_PI/2., M_PI/2.);
+      particle.loc = loc + loc_offset;
+      particle.angle = angle + ang_offset;
+      particle.weight = 1./(double)FLAGS_num_particles;
+    }
   }
-
   odom_initialized_ = false;
   odom_update_initialized_ = false;
   resampled_last_update_ = false;
@@ -386,9 +453,9 @@ void ParticleFilter::GetLocation(Eigen::Vector2f* loc_ptr,
     loc = Vector2f(0., 0.);
     Vector2f angle_iq = Vector2f(0., 0.);
 
-    for (uint i = 0; i < particles_.size(); i++) {
-      loc += particles_[i].loc * particles_[i].weight;
-      angle_iq = angle_iq + Vector2f(cos(particles_[i].angle), sin(particles_[i].angle)) * particles_[i].weight;
+    for (auto& particle : particles_) {
+      loc += particle.loc * particle.weight;
+      angle_iq = angle_iq + Vector2f(cos(particle.angle), sin(particle.angle)) * particle.weight;
     }
 
     angle = atan2(angle_iq[1], angle_iq[0]);

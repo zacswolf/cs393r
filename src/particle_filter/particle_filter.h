@@ -110,6 +110,6 @@ class ParticleFilter {
   bool resampled_last_update_;
 
 };
-}  // namespace slam
+}  // namespace particle_filter
 
 #endif   // SRC_PARTICLE_FILTER_H_
