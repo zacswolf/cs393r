@@ -125,8 +125,9 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
     // TODO: Clean up
 
     // Relative to the car
-    Vector2f start = Vector2f(range_min * cos(ray_angle), range_min * sin(ray_angle)) + kLaserLoc;
-    Vector2f end = Vector2f(range_max * cos(ray_angle), range_max * sin(ray_angle)) + kLaserLoc;
+    const Vector2f ray_rotation(cos(ray_angle), sin(ray_angle));
+    Vector2f start = range_min * ray_rotation + kLaserLoc;
+    Vector2f end = range_max * ray_rotation + kLaserLoc;
 
     // Relative to the map
     start = loc + rotation * start;
@@ -143,7 +144,7 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
     const line2f ray_line = rays[i];
 
     Vector2f closest_point;
-    double closest_point_dist = 100.; //numeric_limits<float>::max();
+    double closest_point_dist = numeric_limits<float>::max();
 
     // Compare each ray to each line in the map
     for (size_t j = 0; j < map_.lines.size(); j++) {
@@ -175,10 +176,9 @@ void ParticleFilter::Update(const vector<float>& ranges,
   // on the observation likelihood computed by relating the observation to the
   // predicted point cloud.
 
-  const int num_ranges = ranges.size(); //TODO: Verify that the size of this doesnt change
-  assert(num_ranges == 1081);
+  const int num_ranges = ranges.size();
 
-  double max_log_weight = -1000000.;numeric_limits<double>::lowest();
+  double max_log_weight = numeric_limits<double>::lowest();
 
   const float robust_min_dist = -FLAGS_robust_min_sd * FLAGS_sd_laser;
   const float robust_max_dist = FLAGS_robust_max_sd * FLAGS_sd_laser;
@@ -270,16 +270,14 @@ void ParticleFilter::Resample() {
   if (!FLAGS_resample_algo) {
     // Regular Resampling
     for (uint i = 0; i < particles_.size(); i++) {
-      double rand = rng_.UniformRandom(0, prefix_sum[prefix_sum.size() -1]);
+      double rand = rng_.UniformRandom(0., prefix_sum[prefix_sum.size() - 1]);
 
       // Find index of prefix_sum where ps[j-1] < r && ps[j] > r
       // TODO: Binary Search?
       for (uint j = 1; j < prefix_sum.size(); j++) {
         if (prefix_sum[j] >= rand) {
           // TODO: Simplify
-          new_particles.push_back(Particle{Vector2f(particles_[j-1].loc[0], particles_[j-1].loc[1]), particles_[j-1].angle, 1./particles_.size()});
-          // new_particles.push_back(particles_[j-1]);
-          // new_particles[i].weight = 1./particles_.size();
+          new_particles.push_back(Particle{Vector2f(particles_[j-1].loc), particles_[j-1].angle, 1./particles_.size()});
           break;
         }
       }
@@ -296,10 +294,7 @@ void ParticleFilter::Resample() {
       // TODO: Binary Search?
       for (uint j = 1; j < prefix_sum.size(); j++) {
         if (prefix_sum[j] >= sample_point) {
-          // TODO: Simplify
-          new_particles.push_back(Particle{Vector2f(particles_[j-1].loc[0], particles_[j-1].loc[1]), particles_[j-1].angle, 1./particles_.size()});
-          // new_particles.push_back(particles_[j-1]);
-          // new_particles[i].weight = 1./particles_.size();
+          new_particles.push_back(Particle{Vector2f(particles_[j-1].loc), particles_[j-1].angle, 1./particles_.size()});
           break;
         }
       }
@@ -331,10 +326,10 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
 
   range_index -= ranges.size()/FLAGS_num_lasers;
   
-  const float ray_increment = (angle_max - angle_min)/(num_ranges-1);
+  const float ray_increment = (angle_max - angle_min)/(num_ranges - 1);
   angle_max = angle_min + ray_increment*range_index;
 
-  if (odom_update_initialized_ || (prev_update_odom_loc_ - prev_odom_loc_).norm() >= FLAGS_update_distance || abs(prev_update_odom_angle_ - prev_odom_angle_) >= FLAGS_update_angle * M_PI / 180.) {
+  if (odom_update_initialized_ || (prev_update_odom_loc_ - prev_odom_loc_).norm() >= FLAGS_update_distance || abs(prev_update_odom_angle_ - prev_odom_angle_) >= DegToRad(FLAGS_update_angle)) {
     // Update only when robot has changed by a threshold
     Update(new_ranges, range_min, range_max, angle_min, angle_max, nullptr);
     
@@ -435,9 +430,9 @@ void ParticleFilter::GetLocation(Eigen::Vector2f* loc_ptr,
     loc = Vector2f(0., 0.);
     Vector2f angle_iq = Vector2f(0., 0.);
 
-    for (uint i = 0; i < particles_.size(); i++) {
-      loc += particles_[i].loc * particles_[i].weight;
-      angle_iq = angle_iq + Vector2f(cos(particles_[i].angle), sin(particles_[i].angle)) * particles_[i].weight;
+    for (auto& particle : particles_) {
+      loc += particle.loc * particle.weight;
+      angle_iq = angle_iq + Vector2f(cos(particle.angle), sin(particle.angle)) * particle.weight;
     }
 
     angle = atan2(angle_iq[1], angle_iq[0]);
