@@ -369,7 +369,7 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   }
 
   Vector2f delt_loc = odom_loc - prev_odom_loc_;
-  float delt_angle = AngleDiff(odom_angle, prev_odom_angle_);//odom_angle - prev_odom_angle_;
+  float delt_angle = AngleDiff(odom_angle, prev_odom_angle_);
 
   Eigen::Rotation2Df r1(-prev_odom_angle_); // rotate odom -> local_prev
 
