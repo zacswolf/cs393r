@@ -51,12 +51,9 @@ using vector_map::VectorMap;
 using math_util::DegToRad;
 using math_util::RadToDeg;
 using math_util::AngleDiff;
+using math_util::AngleMod;
 
 DEFINE_double(num_particles, 50, "Number of particles");
-
-DEFINE_double(sd_predict_x, .1, "Std Dev of local x error");
-DEFINE_double(sd_predict_y, .05, "Std Dev of local y error");
-DEFINE_double(sd_predict_angle, 0.3, "Std Dev of angle error in degrees");
 
 DEFINE_double(sd_x_from_dist, .2, "Std Dev of local x error from translation");
 DEFINE_double(sd_y_from_dist, .05, "Std Dev of local y error from translation");
@@ -73,7 +70,6 @@ DEFINE_double(robust_max_sd, 3., "Num std dev for robust cutoff max");
 
 DEFINE_int32(loc_algo, 1, "Localization algorithm (0 = mode, 1 = mean)");
 DEFINE_int32(robust, 1, "Use robust observation");
-DEFINE_int32(debug_pf, 0, "Debug");
 
 DEFINE_double(update_distance, .15, "Distance in meters that robot should move before calling update");
 DEFINE_double(update_angle, 1., "Angle in degrees that robot should move before calling update");
@@ -380,11 +376,11 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
 
   for (auto& particle : particles_) {
     Eigen::Rotation2Df r2(particle.angle); // rotate local_prev -> map
-    float sd_x = std::max(FLAGS_sd_x_from_dist * delt_loc.norm() + FLAGS_sd_x_from_rot * RadToDeg(abs(delt_angle)), 0.01);
-    float sd_y = std::max(FLAGS_sd_y_from_dist * delt_loc.norm() + FLAGS_sd_y_from_rot * RadToDeg(abs(delt_angle)), 0.01);
-    float sd_ang = DegToRad(std::max(FLAGS_sd_ang_from_dist * delt_loc.norm() + FLAGS_sd_ang_from_rot * RadToDeg(abs(delt_angle)), 0.1));
+    float sd_x = FLAGS_sd_x_from_dist * delt_loc.norm() + FLAGS_sd_x_from_rot * RadToDeg(abs(delt_angle));
+    float sd_y = FLAGS_sd_y_from_dist * delt_loc.norm() + FLAGS_sd_y_from_rot * RadToDeg(abs(delt_angle));
+    float sd_ang = DegToRad(FLAGS_sd_ang_from_dist * delt_loc.norm() + FLAGS_sd_ang_from_rot * RadToDeg(abs(delt_angle)));
     particle.loc += r2*(r1*delt_loc + Vector2f(rng_.Gaussian(0., sd_x), rng_.Gaussian(0., sd_y)));
-    particle.angle += delt_angle + rng_.Gaussian(0., sd_ang);
+    particle.angle = AngleMod(particle.angle + delt_angle + rng_.Gaussian(0., sd_ang));
   }
 
   prev_odom_angle_ = odom_angle;
