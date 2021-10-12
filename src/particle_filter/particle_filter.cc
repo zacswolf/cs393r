@@ -55,7 +55,7 @@ using math_util::AngleMod;
 
 DEFINE_double(num_particles, 50, "Number of particles");
 DEFINE_int32(init_mode, 0, "0 to use location data from set pos, 1 to figure it out");
-DEFINE_double(num_particles_init, 1000, "Number of particles");
+DEFINE_double(num_particles_init, 2000, "Number of particles");
 
 DEFINE_double(sd_x_from_dist, .2, "Std Dev of local x error from translation");
 DEFINE_double(sd_y_from_dist, .05, "Std Dev of local y error from translation");
@@ -406,8 +406,8 @@ void ParticleFilter::Initialize(const string& map_file,
   if (FLAGS_init_mode == 1) {
     particles_.resize(FLAGS_num_particles_init);
     for (auto& particle : particles_) {
-      Vector2f loc_offset = Vector2f(rng_.UniformRandom(-10, 10), rng_.UniformRandom(-10, 10));
-      float ang_offset = rng_.UniformRandom(-M_PI, M_PI);
+      Vector2f loc_offset = Vector2f(rng_.Gaussian(0, 1), rng_.Gaussian(0, 1));
+      float ang_offset = rng_.Gaussian(0, M_PI/4.);
       particle.loc = loc + loc_offset;
       particle.angle = angle + ang_offset;
       particle.weight = 1./(double)FLAGS_num_particles_init;
@@ -416,7 +416,7 @@ void ParticleFilter::Initialize(const string& map_file,
     particles_.resize(FLAGS_num_particles);
     for (auto& particle : particles_) {
       Vector2f loc_offset = Vector2f(rng_.UniformRandom(-0.2, 0.2), rng_.UniformRandom(-0.005, 0.005));
-      float ang_offset = rng_.UniformRandom(-M_PI, M_PI);
+      float ang_offset = rng_.UniformRandom(-M_PI/2., M_PI/2.);
       particle.loc = loc + loc_offset;
       particle.angle = angle + ang_offset;
       particle.weight = 1./(double)FLAGS_num_particles;
