@@ -380,9 +380,9 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
 
   for (auto& particle : particles_) {
     Eigen::Rotation2Df r2(particle.angle); // rotate local_prev -> map
-    float sd_x = FLAGS_sd_x_from_dist * delt_loc.norm() + FLAGS_sd_x_from_rot * RadToDeg(abs(delt_angle));
-    float sd_y = FLAGS_sd_y_from_dist * delt_loc.norm() + FLAGS_sd_y_from_rot * RadToDeg(abs(delt_angle));
-    float sd_ang = DegToRad(FLAGS_sd_ang_from_dist * delt_loc.norm()) + DegToRad(FLAGS_sd_ang_from_rot * RadToDeg(abs(delt_angle)));
+    float sd_x = std::max(FLAGS_sd_x_from_dist * delt_loc.norm() + FLAGS_sd_x_from_rot * RadToDeg(abs(delt_angle)), 0.01);
+    float sd_y = std::max(FLAGS_sd_y_from_dist * delt_loc.norm() + FLAGS_sd_y_from_rot * RadToDeg(abs(delt_angle)), 0.01);
+    float sd_ang = DegToRad(std::max(FLAGS_sd_ang_from_dist * delt_loc.norm() + FLAGS_sd_ang_from_rot * RadToDeg(abs(delt_angle)), 0.1));
     particle.loc += r2*(r1*delt_loc + Vector2f(rng_.Gaussian(0., sd_x), rng_.Gaussian(0., sd_y)));
     particle.angle += delt_angle + rng_.Gaussian(0., sd_ang);
   }
