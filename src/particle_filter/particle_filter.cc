@@ -187,30 +187,35 @@ void ParticleFilter::Update(const vector<float>& ranges,
 
   // Determine log weights
   for (auto& particle : particles_) {
-    vector<Vector2f> scan;
+    vector<Vector2f> pred_scan;
 
-    GetPredictedPointCloud(particle.loc, particle.angle, num_ranges, range_min, range_max, angle_min, angle_max, &scan);
+    GetPredictedPointCloud(particle.loc, particle.angle, num_ranges, range_min, range_max, angle_min, angle_max, &pred_scan);
     
     // Convert GetPredictedPointCloud to ranges
-    vector<double> scan_range(scan.size());
-    for (uint i = 0; i < scan.size(); i++) {
-      scan_range[i] = scan[i].norm();
+    vector<double> pred_ranges(pred_scan.size());
+    for (uint i = 0; i < pred_scan.size(); i++) {
+      pred_ranges[i] = pred_scan[i].norm();
     }
 
     // TODO: robust weighting
-    // Compare the scan_range to ranges
+    // Compare the pred_ranges to ranges
     double sum = 0.;
     uint num_used_ranges = 0;
-    for (uint i = 0; i < scan.size(); i++) {
-      if (scan_range[i] < range_max && scan_range[i] > range_min && ranges[i] < range_max && ranges[i] > range_min) {
-        float dist = ranges[i] - scan_range[i];
-        if (FLAGS_robust) {
-          // Clamp distance
-          dist = std::min(std::max(dist, robust_min_dist), robust_max_dist);
-        }
-        sum += pow(dist / FLAGS_sd_laser, 2.);
-        num_used_ranges++;
-      } // TODO: Maybe add case where scan_range valid xor range valid
+
+    assert(pred_ranges.size() == ranges.size());
+
+    for (uint i = 0; i < pred_ranges.size(); i++) {
+      // Clamp the ranges to be valid
+      float pred_range = std::max(std::min((float)pred_ranges[i], range_max), range_min);
+      float scan_range = std::max(std::min((float)ranges[i], range_max), range_min);        
+
+      float dist = scan_range - pred_range;
+      if (FLAGS_robust) {
+        // Clamp distance
+        dist = std::min(std::max(dist, robust_min_dist), robust_max_dist);
+      }
+      sum += pow(dist / FLAGS_sd_laser, 2.);
+      num_used_ranges++;
     }
 
     // Note: in inconsistent state 
