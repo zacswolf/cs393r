@@ -150,9 +150,9 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
       
       // Convert to SLAM global frame from previous
       PoseData pose;
-      Eigen::Rotation2Df rotation_pose(previous_poses_.back().angle);
-      pose.angle = AngleMod(csm_data.angle + previous_poses_.back().angle);
-      pose.loc = rotation_pose * csm_data.loc + previous_poses_.back().loc;
+      Eigen::Rotation2Df rotation_pose(prev_poses_.back().angle);
+      pose.angle = AngleMod(csm_data.angle + prev_poses_.back().angle);
+      pose.loc = rotation_pose * csm_data.loc + prev_poses_.back().loc;
       pose.point_cloud = point_cloud;
 
       Eigen::Rotation2Df rotation_new_pose(pose.angle);
@@ -220,7 +220,7 @@ SLAM::CsmData SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::Matrix
                                         rel_odom_angle,
                                         std::numeric_limits<float>::lowest()};
 
-  for (float angle_offset = -Deg2Rad(FLAGS_csm_angle_max); angle_offset < Deg2Rad(FLAGS_csm_angle_max); angle_offset += Deg2Rad(FLAGS_csm_angle_step)) {
+  for (float angle_offset = -DegToRad(FLAGS_csm_angle_max); angle_offset < DegToRad(FLAGS_csm_angle_max); angle_offset += DegToRad(FLAGS_csm_angle_step)) {
 
     float log_likelihood_odom_angle = odom_angle_pdf_const - 0.5 * pow(abs(angle_offset)/FLAGS_sd_odom_angle, 2);
     float angle = AngleMod(rel_odom_angle + angle_offset);
@@ -296,7 +296,7 @@ vector<Vector2f> SLAM::GetMap() {
   // and their respective scans.
 
   // Iterate through all of the saved point clouds
-  for (auto& pose : previous_poses_) {
+  for (auto& pose : prev_poses_) {
     for (auto& point : pose.point_cloud) {
       map.push_back(point);
     }
