@@ -28,9 +28,12 @@
 #ifndef SRC_SLAM_H_
 #define SRC_SLAM_H_
 
+
 namespace slam {
 
+
 class SLAM {
+
  public:
   // Default Constructor.
   SLAM();
@@ -52,12 +55,55 @@ class SLAM {
   // Get latest robot pose.
   void GetPose(Eigen::Vector2f* loc, float* angle) const;
 
+  // Our functions
+
+  // Convert scan to point cloud
+  std::vector<Eigen::Vector2f> ScanToPointCloud(
+                    const std::vector<float>& ranges,
+                    float range_min,
+                    float range_max,
+                    float angle_min,
+                    float angle_max);
+
+  // Rasterize into our map
+  // MatrixXf is of dimention raster_map_dist/raster_dist
+  Eigen::MatrixXf RasterizePointCloud(const std::vector<Eigen::Vector2f> point_cloud);
+
+
+  struct CsmData {
+    Eigen::Vector2f loc;
+    float angle;
+    float log_likelihood;
+  };
+
+  // Correlative Scan Matching
+  CsmData CSM(const std::vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster);
+
  private:
+  
+  const uint num_pixels_;
 
   // Previous odometry-reported locations.
   Eigen::Vector2f prev_odom_loc_;
   float prev_odom_angle_;
   bool odom_initialized_;
+
+  // Current odometry-reported locations.
+  Eigen::Vector2f current_odom_loc_;
+  float current_odom_angle_;
+
+  // Previous pose
+  bool pose_initialized_;
+  
+  struct PoseData {
+    Eigen::Vector2f loc;
+    float angle;
+    std::vector<Eigen::Vector2f> point_cloud;
+  };
+
+  std::vector<PoseData> prev_poses_;
+  std::vector<Eigen::Vector2f> prev_point_cloud_;
+
 };
 }  // namespace slam
 
