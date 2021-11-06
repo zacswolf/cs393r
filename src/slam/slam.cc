@@ -39,8 +39,8 @@
 DEFINE_double(min_odom_loc_diff, .5, "Minimum Odom translation diff to create a new pose");
 DEFINE_double(min_odom_angle_diff, 20, "Minimum Odom rotation diff to create a new pose");
 
-DEFINE_double(sd_laser, 0.5, "Std dev of laser scan");
-DEFINE_double(sd_laser_fine, 0.05, "Std dev of laser scan");
+DEFINE_double(sd_laser, 0.25, "Std dev of laser scan");
+DEFINE_double(sd_laser_fine, 0.025, "Std dev of laser scan");
 DEFINE_double(sd_odom_x, 1.0, "Std dev of odometry in x direction");
 DEFINE_double(sd_odom_y, 1.0, "Std dev of odometry in x direction");
 DEFINE_double(sd_odom_angle, 30.0, "Std dev of odometry in x direction");
@@ -50,7 +50,7 @@ DEFINE_double(raster_pixel_dist, 0.01, "Size of each pixel in the raster map");
 DEFINE_double(csm_transl_max, 0.8, "Max translation for CSM");
 DEFINE_double(csm_angle_max, 30, "Max rotation for CSM");
 DEFINE_double(csm_transl_step, 0.1, "Translation step size for CSM");
-DEFINE_double(csm_transl_fine_step, 0.02, "Translation step size for CSM");
+DEFINE_double(csm_transl_fine_step, 0.01, "Translation step size for CSM");
 DEFINE_double(csm_angle_step, 1, "Rotation step size for CSM");
 DEFINE_double(csm_angle_fine_step, 0.05, "Rotation step size for CSM");
 DEFINE_int32(map_scan_mod, 4, "The module of the number of point used during create map");
@@ -327,9 +327,9 @@ SLAM::CsmData SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::Matrix
                  FLAGS_csm_transl_max, FLAGS_csm_transl_step, rel_odom_loc);
 
   // Fine CSM
-  static const float csm_angle_fine_max = 2*DegToRad(FLAGS_csm_angle_step);
+  static const float csm_angle_fine_max = 1.5*DegToRad(FLAGS_csm_angle_step);
   static const float csm_angle_fine_step = DegToRad(FLAGS_csm_angle_fine_step);
-  static const float csm_transl_fine_max = 2*FLAGS_csm_transl_step;
+  static const float csm_transl_fine_max = 1.5*FLAGS_csm_transl_step;
   static const float csm_transl_fine_step = FLAGS_csm_transl_fine_step;
 
   results = CSM_Search(sampled_point_cloud, raster_fine,
