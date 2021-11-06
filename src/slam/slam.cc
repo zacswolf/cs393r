@@ -130,7 +130,7 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
 
   if (!pose_initialized_) {
     std::vector<Eigen::Vector2f> point_cloud = ScanToPointCloud(ranges, range_min, range_max, angle_min, angle_max);
-    prev_poses_.push_back(PoseData{Eigen::Vector2f(0,0), 0, point_cloud});
+    prev_poses_.push_back(PoseData{Eigen::Vector2f(0,0), 0});
     prev_point_cloud_ = point_cloud;
     pose_initialized_ = true;
 
@@ -158,25 +158,16 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
       Eigen::Rotation2Df rotation_pose(prev_poses_.back().angle);
       pose.angle = AngleMod(csm_data.angle + prev_poses_.back().angle);
       pose.loc = rotation_pose * csm_data.loc + prev_poses_.back().loc;
-      
-      std::vector<Eigen::Vector2f> empty_point_cloud;
-      pose.point_cloud = empty_point_cloud;
 
       prev_point_cloud_ = point_cloud;
 
       Eigen::Rotation2Df rotation_new_pose(pose.angle);
 
-      // Add new pose
-      int count = 0;
+      // Add new pose and point cloud to map
       prev_poses_.push_back(pose);
-      for (auto& point : point_cloud) {
-        if (count <= 0) {
-          Eigen::Vector2f new_point = rotation_new_pose * point + pose.loc;
-          map_.push_back(new_point);
-          count = 3;
-        } else {
-          count -= 1;
-        }
+      for (uint i = 0; i < point_cloud.size(); i += 4) {
+        Eigen::Vector2f new_point = rotation_new_pose * point_cloud[i] + pose.loc;
+        map_.push_back(new_point);
       }
 
       // Update Odom
@@ -330,18 +321,6 @@ void SLAM::ObserveOdometry(const Vector2f& odom_loc, const float odom_angle) {
 }
 
 vector<Vector2f> SLAM::GetMap() {
-  // vector<Vector2f> map;
-  // // Reconstruct the map as a single aligned point cloud from all saved poses
-  // // and their respective scans.
-
-  // // Iterate through all of the saved point clouds
-  // for (auto& pose : prev_poses_) {
-  //   for (auto& point : pose.point_cloud) {
-  //     map.push_back(point);
-  //   }
-  // }
-  // Add each one to the mega point cloud
-  
   // That's it
   return map_;
 }
