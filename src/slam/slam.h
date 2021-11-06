@@ -81,7 +81,7 @@ class SLAM {
 
  private:
 
-  const uint num_pixels_;
+  const int num_pixels_;
 
   CsmData CSM_Search(std::vector<Eigen::Vector2f> sampled_point_cloud, Eigen::MatrixXf raster,
                  float angle_offset_max, float angle_offset_step, float angle_est, 

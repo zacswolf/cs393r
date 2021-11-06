@@ -203,15 +203,15 @@ Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cl
   // Compute max log likelihood of every point in the map (max from each point in point cloud)
   static const float gaussian_pdf_const = -log(sd_laser) - 0.5 * log(2 * M_PI);
   for (auto& pt : point_cloud) {
-    Eigen::Vector2f raster_loc = (pt.array() + FLAGS_raster_map_dist)/FLAGS_raster_pixel_dist;
+    Eigen::Vector2i raster_loc = ((pt.array() + FLAGS_raster_map_dist)/FLAGS_raster_pixel_dist).cast<int>();
     // Clamp
-    uint index_x_min = (uint) Clamp((int)raster_loc[0] - 20, 0, (int) num_pixels_ - 1);
-    uint index_x_max = (uint) Clamp((int)raster_loc[0] + 20, 0, (int) num_pixels_ - 1);
-    uint index_y_min = (uint) Clamp((int)raster_loc[1] - 20, 0, (int) num_pixels_ - 1);
-    uint index_y_max = (uint) Clamp((int)raster_loc[1] + 20, 0, (int) num_pixels_ - 1);
+    int index_x_min = Clamp(raster_loc[0] - 20, 0, num_pixels_ - 1);
+    int index_x_max = Clamp(raster_loc[0] + 20, 0, num_pixels_ - 1);
+    int index_y_min = Clamp(raster_loc[1] - 20, 0, num_pixels_ - 1);
+    int index_y_max = Clamp(raster_loc[1] + 20, 0, num_pixels_ - 1);
 
-    for (uint x_ind = index_x_min; x_ind <= index_x_max; x_ind++) {
-      for (uint y_ind = index_y_min; y_ind <= index_y_max; y_ind++) {
+    for (int x_ind = index_x_min; x_ind <= index_x_max; x_ind++) {
+      for (int y_ind = index_y_min; y_ind <= index_y_max; y_ind++) {
         
         Eigen::Vector2f loc = FLAGS_raster_pixel_dist * Eigen::Vector2f(x_ind, y_ind).array() - FLAGS_raster_map_dist;
         float dist = (loc - pt).norm();
@@ -276,11 +276,11 @@ SLAM::CsmData SLAM::CSM_Search(std::vector<Eigen::Vector2f> sampled_point_cloud,
         for (auto& point : rotated_point_cloud) {
           // Relative to previous odometry
           Eigen::Vector2f tranformed_point = point + loc;
-          Eigen::Vector2f raster_loc = (tranformed_point.array() + FLAGS_raster_map_dist)/FLAGS_raster_pixel_dist;
+          Eigen::Vector2i raster_loc = ((tranformed_point.array() + FLAGS_raster_map_dist)/FLAGS_raster_pixel_dist).cast<int>();
 
           // Clamp
-          int index_x = std::max(std::min((int)raster_loc[0], (int) num_pixels_ - 1), 0);
-          int index_y = std::max(std::min((int)raster_loc[1], (int) num_pixels_ - 1), 0);
+          int index_x = Clamp(raster_loc[0], 0, num_pixels_ - 1);
+          int index_y = Clamp(raster_loc[1], 0, num_pixels_ - 1);
 
           raster_score += raster(index_x, index_y);
         }
