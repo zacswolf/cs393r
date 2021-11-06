@@ -80,8 +80,12 @@ class SLAM {
   CsmData CSM(const std::vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster);
 
  private:
-  
+
   const uint num_pixels_;
+
+  CsmData CSM_Search(std::vector<Eigen::Vector2f> sampled_point_cloud, Eigen::MatrixXf raster,
+                 float angle_offset_max, float angle_offset_step, float angle_est, 
+                 float transl_offset_max, float transl_offset_step, Eigen::Vector2f transl_est);
 
   // Previous odometry-reported locations.
   Eigen::Vector2f prev_odom_loc_;
