@@ -48,8 +48,10 @@ DEFINE_double(raster_map_dist, 12.0, "Maximum distance of x & y axes in the rast
 DEFINE_double(raster_pixel_dist, 0.025, "Size of each pixel in the raster map");
 DEFINE_double(csm_transl_max, 0.5, "Max translation for CSM");
 DEFINE_double(csm_angle_max, 30, "Max rotation for CSM");
-DEFINE_double(csm_transl_step, 0.05, "Translation step size for CSM");
+DEFINE_double(csm_transl_step, 0.1, "Translation step size for CSM");
+DEFINE_double(csm_transl_fine_step, 0.05, "Translation step size for CSM");
 DEFINE_double(csm_angle_step, 0.1, "Rotation step size for CSM");
+DEFINE_double(csm_angle_fine_step, 0.05, "Rotation step size for CSM");
 DEFINE_int32(map_scan_mod, 4, "The module of the number of point used during create map");
 DEFINE_int32(csm_scan_mod, 1, "The module of the number of point used during CSM");
 
@@ -269,6 +271,70 @@ SLAM::CsmData SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::Matrix
 
         float log_likelihood_odom_y = odom_y_pdf_const - 0.5 * pow(abs(y_offset)/FLAGS_sd_odom_y, 2);
         float y = rel_odom_loc[1] + y_offset;
+
+        // Compute odom likelihood
+        float odom_log_likelihood = log_likelihood_odom_angle + log_likelihood_odom_x + log_likelihood_odom_y;
+
+        // Relative to previous odometry
+        Eigen::Vector2f loc = Eigen::Vector2f(x, y);
+
+        float raster_score = 0;
+        for (auto& point : rotated_point_cloud) {
+          // Relative to previous odometry
+          Eigen::Vector2f tranformed_point = point + loc;
+          Eigen::Vector2f raster_loc = (tranformed_point.array() + FLAGS_raster_map_dist)/FLAGS_raster_pixel_dist;
+
+          // Clamp
+          int index_x = std::max(std::min((int)raster_loc[0], (int) num_pixels_ - 1), 0);
+          int index_y = std::max(std::min((int)raster_loc[1], (int) num_pixels_ - 1), 0);
+
+          raster_score += raster(index_x, index_y);
+        }
+
+        // Evaluate log likelihood of each
+        // Raster log likelihood PLUS odometry log likelihood
+
+        float log_likelihood = odom_log_likelihood + raster_score;
+        if (log_likelihood > results.log_likelihood) {
+          //std::cout << log_likelihood << " Angle: " << RadToDeg(angle) << " Loc: " << loc.transpose() << "\n";
+          results.angle = angle;
+          results.loc = loc;
+          results.log_likelihood = log_likelihood;
+        }
+
+      }
+    }
+  }
+
+  float angle_coarse = results.angle;
+  float x_coarse = results.loc[0];
+  float y_coarse = results.loc[1];
+
+  // Fine CSM
+  static const float csm_angle_fine_max = DegToRad(FLAGS_csm_angle_step);
+  static const float csm_angle_fine_step = DegToRad(FLAGS_csm_angle_fine_step);
+  for (float angle_offset = -csm_angle_fine_max; angle_offset < csm_angle_fine_max; angle_offset += csm_angle_fine_step) {
+
+    float log_likelihood_odom_angle = odom_angle_pdf_const - 0.5 * pow(abs(angle_offset)/sd_odom_angle, 2);
+    float angle = AngleMod(angle_coarse + angle_offset);
+    Eigen::Rotation2Df rotation(angle);
+    
+    vector<Vector2f> rotated_point_cloud = sampled_point_cloud;
+
+    for (auto& point : rotated_point_cloud) {
+      // Relative to previous odometry
+      point = rotation * point;
+    }
+
+    for (float x_offset = -FLAGS_csm_transl_step; x_offset < FLAGS_csm_transl_step; x_offset += FLAGS_csm_transl_fine_step) {
+
+      float log_likelihood_odom_x = odom_x_pdf_const - 0.5 * pow(abs(x_offset)/FLAGS_sd_odom_x, 2);
+      float x = x_coarse + x_offset;
+
+      for (float y_offset = -FLAGS_csm_transl_step; y_offset < FLAGS_csm_transl_step; y_offset += FLAGS_csm_transl_fine_step) {
+
+        float log_likelihood_odom_y = odom_y_pdf_const - 0.5 * pow(abs(y_offset)/FLAGS_sd_odom_y, 2);
+        float y = y_coarse + y_offset;
 
         // Compute odom likelihood
         float odom_log_likelihood = log_likelihood_odom_angle + log_likelihood_odom_x + log_likelihood_odom_y;
