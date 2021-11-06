@@ -105,6 +105,8 @@ class SLAM {
   std::vector<PoseData> prev_poses_;
   std::vector<Eigen::Vector2f> prev_point_cloud_;
 
+  int odom_counter_;
+
 };
 }  // namespace slam
 

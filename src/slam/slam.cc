@@ -37,21 +37,21 @@
 
 
 DEFINE_double(min_odom_loc_diff, .5, "Minimum Odom translation diff to create a new pose");
-DEFINE_double(min_odom_angle_diff, 30, "Minimum Odom rotation diff to create a new pose");
+DEFINE_double(min_odom_angle_diff, 20, "Minimum Odom rotation diff to create a new pose");
 
-DEFINE_double(sd_laser, 0.05, "Std dev of laser scan");
+DEFINE_double(sd_laser, 0.1, "Std dev of laser scan");
 DEFINE_double(sd_odom_x, 1.0, "Std dev of odometry in x direction");
 DEFINE_double(sd_odom_y, 1.0, "Std dev of odometry in x direction");
 DEFINE_double(sd_odom_angle, 30.0, "Std dev of odometry in x direction");
 
 DEFINE_double(raster_map_dist, 12.0, "Maximum distance of x & y axes in the rasterized map");
 DEFINE_double(raster_pixel_dist, 0.025, "Size of each pixel in the raster map");
-DEFINE_double(csm_transl_max, 0.6, "Max translation for CSM");
-DEFINE_double(csm_angle_max, 25, "Max rotation for CSM");
+DEFINE_double(csm_transl_max, 0.5, "Max translation for CSM");
+DEFINE_double(csm_angle_max, 30, "Max rotation for CSM");
 DEFINE_double(csm_transl_step, 0.05, "Translation step size for CSM");
-DEFINE_double(csm_angle_step, 0.05, "Rotation step size for CSM");
-DEFINE_int32(map_scan_mod, 40, "The module of the number of point used during create map");
-DEFINE_int32(csm_scan_mod, 4, "The module of the number of point used during CSM");
+DEFINE_double(csm_angle_step, 0.1, "Rotation step size for CSM");
+DEFINE_int32(map_scan_mod, 4, "The module of the number of point used during create map");
+DEFINE_int32(csm_scan_mod, 1, "The module of the number of point used during CSM");
 
 
 using namespace math_util;
@@ -81,7 +81,8 @@ SLAM::SLAM() :
     odom_initialized_(false),
     current_odom_loc_(0, 0),
     current_odom_angle_(0),
-    pose_initialized_(false) {}
+    pose_initialized_(false),
+    odom_counter_(16) {}
 
 void SLAM::GetPose(Eigen::Vector2f* loc, float* angle) const {
   // Return the latest pose estimate of the robot.
@@ -221,10 +222,10 @@ SLAM::CsmData SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::Matrix
   // Center the search around our odomety position
 
   // Reduce Number of points in our point cloud
-  vector<Vector2f> sampled_point_cloud(point_cloud.size()/FLAGS_csm_scan_mod);
+  vector<Vector2f> sampled_point_cloud;//(point_cloud.size()/FLAGS_csm_scan_mod);
 
   for (uint i = 0; i < point_cloud.size(); i += FLAGS_csm_scan_mod) {
-    sampled_point_cloud[i] = point_cloud[i];
+    sampled_point_cloud.push_back(point_cloud[i]);
   }
 
   // These are constants for the log gaussian pdf
@@ -309,12 +310,16 @@ SLAM::CsmData SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::Matrix
 }
 
 void SLAM::ObserveOdometry(const Vector2f& odom_loc, const float odom_angle) {
-  if (!odom_initialized_) {
+  if (!odom_initialized_ && odom_counter_ <= 0) {
+    std::cout << "Initializing odom! \n";
     prev_odom_angle_ = odom_angle;
     prev_odom_loc_ = odom_loc;
     odom_initialized_ = true;
     return;
+  } else {
+    odom_counter_--;
   }
+
   // Keep track of odometry to estimate how far the robot has moved between 
   // poses.
 
