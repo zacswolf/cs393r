@@ -50,6 +50,8 @@ DEFINE_double(csm_transl_max, 0.6, "Max translation for CSM");
 DEFINE_double(csm_angle_max, 25, "Max rotation for CSM");
 DEFINE_double(csm_transl_step, 0.05, "Translation step size for CSM");
 DEFINE_double(csm_angle_step, 0.05, "Rotation step size for CSM");
+DEFINE_int32(map_scan_mod, 40, "The module of the number of point used during create map");
+DEFINE_int32(csm_scan_mod, 4, "The module of the number of point used during CSM");
 
 
 using namespace math_util;
@@ -68,6 +70,7 @@ using math_util::DegToRad;
 using math_util::RadToDeg;
 using math_util::AngleDiff;
 using math_util::AngleMod;
+using math_util::Clamp;
 
 namespace slam {
 
@@ -165,7 +168,7 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
 
       // Add new pose and point cloud to map
       prev_poses_.push_back(pose);
-      for (uint i = 0; i < point_cloud.size(); i += 4) {
+      for (uint i = 0; i < point_cloud.size(); i += FLAGS_map_scan_mod) {
         Eigen::Vector2f new_point = rotation_new_pose * point_cloud[i] + pose.loc;
         map_.push_back(new_point);
       }
@@ -185,17 +188,14 @@ Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cl
   Eigen::MatrixXf raster = Eigen::MatrixXf::Constant(num_pixels_, num_pixels_, min_value);
 
   // Compute max log likelihood of every point in the map (max from each point in point cloud)
-  uint num_points = point_cloud.size();
-  const float gaussian_pdf_const = -log(FLAGS_sd_laser) - 0.5 * log(2 * M_PI);
-  for (uint pt_ind = 0; pt_ind < num_points; pt_ind++) {
-    Eigen::Vector2f pt = point_cloud[pt_ind];
-
+  static const float gaussian_pdf_const = -log(FLAGS_sd_laser) - 0.5 * log(2 * M_PI);
+  for (auto& pt : point_cloud) {
     Eigen::Vector2f raster_loc = (pt.array() + FLAGS_raster_map_dist)/FLAGS_raster_pixel_dist;
     // Clamp
-    uint index_x_min = (uint) std::max(std::min((int)raster_loc[0] - 10, (int) num_pixels_ - 1), 0);
-    uint index_x_max = (uint) std::max(std::min((int)raster_loc[0] + 10, (int) num_pixels_ - 1), 0);
-    uint index_y_min = (uint) std::max(std::min((int)raster_loc[1] - 10, (int) num_pixels_ - 1), 0);
-    uint index_y_max = (uint) std::max(std::min((int)raster_loc[1] + 10, (int) num_pixels_ - 1), 0);
+    uint index_x_min = (uint) Clamp((int)raster_loc[0] - 10, 0, (int) num_pixels_ - 1);
+    uint index_x_max = (uint) Clamp((int)raster_loc[0] + 10, 0, (int) num_pixels_ - 1);
+    uint index_y_min = (uint) Clamp((int)raster_loc[1] - 10, 0, (int) num_pixels_ - 1);
+    uint index_y_max = (uint) Clamp((int)raster_loc[1] + 10, 0, (int) num_pixels_ - 1);
 
     for (uint x_ind = index_x_min; x_ind <= index_x_max; x_ind++) {
       for (uint y_ind = index_y_min; y_ind <= index_y_max; y_ind++) {
@@ -206,7 +206,7 @@ Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cl
         // Log of gaussian pdf
         float log_likelihood = gaussian_pdf_const - 0.5 * pow(dist/FLAGS_sd_laser, 2);
         
-        raster(x_ind,y_ind) = std::max(raster(x_ind,y_ind), log_likelihood);
+        raster(x_ind,y_ind) = std::max(raster(x_ind, y_ind), log_likelihood);
       }
     }
 
@@ -218,12 +218,19 @@ Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cl
 SLAM::CsmData SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster) {
   
   // Iterate through angle, dx, and dy
-  // // Center the search around our odomety position
+  // Center the search around our odomety position
+
+  // Reduce Number of points in our point cloud
+  vector<Vector2f> sampled_point_cloud(point_cloud.size()/FLAGS_csm_scan_mod);
+
+  for (uint i = 0; i < point_cloud.size(); i += FLAGS_csm_scan_mod) {
+    sampled_point_cloud[i] = point_cloud[i];
+  }
 
   // These are constants for the log gaussian pdf
-  const float odom_angle_pdf_const = -log(FLAGS_sd_odom_angle) - 0.5 * log(2 * M_PI);
-  const float odom_x_pdf_const = -log(FLAGS_sd_odom_x) - 0.5 * log(2 * M_PI);
-  const float odom_y_pdf_const = -log(FLAGS_sd_odom_y) - 0.5 * log(2 * M_PI);
+  static const float odom_angle_pdf_const = -log(FLAGS_sd_odom_angle) - 0.5 * log(2 * M_PI);
+  static const float odom_x_pdf_const = -log(FLAGS_sd_odom_x) - 0.5 * log(2 * M_PI);
+  static const float odom_y_pdf_const = -log(FLAGS_sd_odom_y) - 0.5 * log(2 * M_PI);
 
   const Eigen::Rotation2Df rotation_odom(-prev_odom_angle_);
   Eigen::Vector2f rel_odom_loc = rotation_odom * (current_odom_loc_ - prev_odom_loc_);
@@ -235,13 +242,17 @@ SLAM::CsmData SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::Matrix
                                         rel_odom_angle,
                                         std::numeric_limits<float>::lowest()};
 
-  for (float angle_offset = -DegToRad(FLAGS_csm_angle_max); angle_offset < DegToRad(FLAGS_csm_angle_max); angle_offset += DegToRad(FLAGS_csm_angle_step)) {
 
-    float log_likelihood_odom_angle = odom_angle_pdf_const - 0.5 * pow(abs(angle_offset)/DegToRad(FLAGS_sd_odom_angle), 2);
+  static const float csm_angle_max = DegToRad(FLAGS_csm_angle_max);
+  static const float csm_angle_step = DegToRad(FLAGS_csm_angle_step);
+  static const float sd_odom_angle = DegToRad(FLAGS_sd_odom_angle);
+  for (float angle_offset = -csm_angle_max; angle_offset < csm_angle_max; angle_offset += csm_angle_step) {
+
+    float log_likelihood_odom_angle = odom_angle_pdf_const - 0.5 * pow(abs(angle_offset)/sd_odom_angle, 2);
     float angle = AngleMod(rel_odom_angle + angle_offset);
     Eigen::Rotation2Df rotation(angle);
     
-    vector<Vector2f> rotated_point_cloud = point_cloud;
+    vector<Vector2f> rotated_point_cloud = sampled_point_cloud;
 
     for (auto& point : rotated_point_cloud) {
       // Relative to previous odometry
@@ -278,7 +289,7 @@ SLAM::CsmData SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::Matrix
         }
 
         // Evaluate log likelihood of each
-        // // Raster log likelihood PLUS odometry log likelihood
+        // Raster log likelihood PLUS odometry log likelihood
 
         float log_likelihood = odom_log_likelihood + raster_score;
         if (log_likelihood > results.log_likelihood) {
