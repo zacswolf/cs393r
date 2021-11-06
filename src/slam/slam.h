@@ -67,7 +67,7 @@ class SLAM {
 
   // Rasterize into our map
   // MatrixXf is of dimention raster_map_dist/raster_dist
-  Eigen::MatrixXf RasterizePointCloud(const std::vector<Eigen::Vector2f> point_cloud);
+  Eigen::MatrixXf RasterizePointCloud(const std::vector<Eigen::Vector2f> point_cloud, bool fine_sd);
 
 
   struct CsmData {
@@ -77,7 +77,7 @@ class SLAM {
   };
 
   // Correlative Scan Matching
-  CsmData CSM(const std::vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster);
+  CsmData CSM(const std::vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster, Eigen::MatrixXf raster_fine);
 
  private:
 

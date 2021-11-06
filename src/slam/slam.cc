@@ -39,18 +39,18 @@
 DEFINE_double(min_odom_loc_diff, .5, "Minimum Odom translation diff to create a new pose");
 DEFINE_double(min_odom_angle_diff, 20, "Minimum Odom rotation diff to create a new pose");
 
-DEFINE_double(sd_laser, 0.1, "Std dev of laser scan");
+DEFINE_double(sd_laser, 0.5, "Std dev of laser scan");
 DEFINE_double(sd_laser_fine, 0.05, "Std dev of laser scan");
 DEFINE_double(sd_odom_x, 1.0, "Std dev of odometry in x direction");
 DEFINE_double(sd_odom_y, 1.0, "Std dev of odometry in x direction");
 DEFINE_double(sd_odom_angle, 30.0, "Std dev of odometry in x direction");
 
 DEFINE_double(raster_map_dist, 12.0, "Maximum distance of x & y axes in the rasterized map");
-DEFINE_double(raster_pixel_dist, 0.025, "Size of each pixel in the raster map");
+DEFINE_double(raster_pixel_dist, 0.01, "Size of each pixel in the raster map");
 DEFINE_double(csm_transl_max, 0.8, "Max translation for CSM");
 DEFINE_double(csm_angle_max, 30, "Max rotation for CSM");
 DEFINE_double(csm_transl_step, 0.1, "Translation step size for CSM");
-DEFINE_double(csm_transl_fine_step, 0.01, "Translation step size for CSM");
+DEFINE_double(csm_transl_fine_step, 0.02, "Translation step size for CSM");
 DEFINE_double(csm_angle_step, 1, "Rotation step size for CSM");
 DEFINE_double(csm_angle_fine_step, 0.05, "Rotation step size for CSM");
 DEFINE_int32(map_scan_mod, 4, "The module of the number of point used during create map");
@@ -155,9 +155,10 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
       // Compute best pose
       std::vector<Eigen::Vector2f> point_cloud = ScanToPointCloud(ranges, range_min, range_max, angle_min, angle_max);
       std::cout << "Created point cloud!\n";
-      Eigen::MatrixXf raster = RasterizePointCloud(prev_point_cloud_);
+      Eigen::MatrixXf raster = RasterizePointCloud(prev_point_cloud_, false);
+      Eigen::MatrixXf raster_fine = RasterizePointCloud(prev_point_cloud_, true);
       std::cout << "Created raster map!\n";
-      SLAM::CsmData csm_data = CSM(point_cloud, raster);
+      SLAM::CsmData csm_data = CSM(point_cloud, raster, raster_fine);
       std::cout << "Finished CSM!\n\n";
 
       // Convert to SLAM global frame from previous
@@ -185,21 +186,29 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
 
 }
 
-Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cloud) {
+Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cloud, bool fine_sd) {
   
+  float sd_laser;
+
+  if (fine_sd) {
+    sd_laser = FLAGS_sd_laser_fine;
+  } else {
+    sd_laser = FLAGS_sd_laser;
+  }
+
   // float min_value = std::numeric_limits<float>::lowest();
   float min_value = -10;
   Eigen::MatrixXf raster = Eigen::MatrixXf::Constant(num_pixels_, num_pixels_, min_value);
 
   // Compute max log likelihood of every point in the map (max from each point in point cloud)
-  static const float gaussian_pdf_const = -log(FLAGS_sd_laser) - 0.5 * log(2 * M_PI);
+  static const float gaussian_pdf_const = -log(sd_laser) - 0.5 * log(2 * M_PI);
   for (auto& pt : point_cloud) {
     Eigen::Vector2f raster_loc = (pt.array() + FLAGS_raster_map_dist)/FLAGS_raster_pixel_dist;
     // Clamp
-    uint index_x_min = (uint) Clamp((int)raster_loc[0] - 10, 0, (int) num_pixels_ - 1);
-    uint index_x_max = (uint) Clamp((int)raster_loc[0] + 10, 0, (int) num_pixels_ - 1);
-    uint index_y_min = (uint) Clamp((int)raster_loc[1] - 10, 0, (int) num_pixels_ - 1);
-    uint index_y_max = (uint) Clamp((int)raster_loc[1] + 10, 0, (int) num_pixels_ - 1);
+    uint index_x_min = (uint) Clamp((int)raster_loc[0] - 20, 0, (int) num_pixels_ - 1);
+    uint index_x_max = (uint) Clamp((int)raster_loc[0] + 20, 0, (int) num_pixels_ - 1);
+    uint index_y_min = (uint) Clamp((int)raster_loc[1] - 20, 0, (int) num_pixels_ - 1);
+    uint index_y_max = (uint) Clamp((int)raster_loc[1] + 20, 0, (int) num_pixels_ - 1);
 
     for (uint x_ind = index_x_min; x_ind <= index_x_max; x_ind++) {
       for (uint y_ind = index_y_min; y_ind <= index_y_max; y_ind++) {
@@ -208,7 +217,7 @@ Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cl
         float dist = (loc - pt).norm();
 
         // Log of gaussian pdf
-        float log_likelihood = gaussian_pdf_const - 0.5 * pow(dist/FLAGS_sd_laser, 2);
+        float log_likelihood = gaussian_pdf_const - 0.5 * pow(dist/sd_laser, 2);
         
         raster(x_ind,y_ind) = std::max(raster(x_ind, y_ind), log_likelihood);
       }
@@ -293,7 +302,7 @@ SLAM::CsmData SLAM::CSM_Search(std::vector<Eigen::Vector2f> sampled_point_cloud,
   return results;
 }
 
-SLAM::CsmData SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster) {
+SLAM::CsmData SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster, Eigen::MatrixXf raster_fine) {
   
   // Iterate through angle, dx, and dy
   // Center the search around our odomety position
@@ -375,9 +384,9 @@ SLAM::CsmData SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::Matrix
                  FLAGS_csm_transl_max, FLAGS_csm_transl_step, rel_odom_loc);
 
   // Fine CSM
-  static const float csm_angle_fine_max = DegToRad(FLAGS_csm_angle_step);
+  static const float csm_angle_fine_max = 2*DegToRad(FLAGS_csm_angle_step);
   static const float csm_angle_fine_step = DegToRad(FLAGS_csm_angle_fine_step);
-  static const float csm_transl_fine_max = FLAGS_csm_transl_step;
+  static const float csm_transl_fine_max = 2*FLAGS_csm_transl_step;
   static const float csm_transl_fine_step = FLAGS_csm_transl_step;
   // for (float angle_offset = -2*csm_angle_fine_max; angle_offset < 2*csm_angle_fine_max; angle_offset += csm_angle_fine_step) {
 
@@ -436,7 +445,7 @@ SLAM::CsmData SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::Matrix
   //   }
   // }
 
-  results = CSM_Search(sampled_point_cloud, raster,
+  results = CSM_Search(sampled_point_cloud, raster_fine,
                 csm_angle_fine_max, csm_angle_fine_step, results.angle, 
                 csm_transl_fine_max, csm_transl_fine_step, results.loc);
 
