@@ -199,8 +199,6 @@ Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cl
 
     for (uint x_ind = index_x_min; x_ind <= index_x_max; x_ind++) {
       for (uint y_ind = index_y_min; y_ind <= index_y_max; y_ind++) {
-    // for (uint x_ind = 0; x_ind < num_pixels_; x_ind++) {
-    //   for (uint y_ind = 0; y_ind < num_pixels_; y_ind++) {
         
         Eigen::Vector2f loc = FLAGS_raster_pixel_dist * Eigen::Vector2f(x_ind, y_ind).array() - FLAGS_raster_map_dist;
         float dist = (loc - pt).norm();
@@ -238,7 +236,6 @@ SLAM::CsmData SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::Matrix
                                         std::numeric_limits<float>::lowest()};
 
   for (float angle_offset = -DegToRad(FLAGS_csm_angle_max); angle_offset < DegToRad(FLAGS_csm_angle_max); angle_offset += DegToRad(FLAGS_csm_angle_step)) {
-  //for (float angle_offset = 0; angle_offset < 1; angle_offset += 2) {
 
     float log_likelihood_odom_angle = odom_angle_pdf_const - 0.5 * pow(abs(angle_offset)/DegToRad(FLAGS_sd_odom_angle), 2);
     float angle = AngleMod(rel_odom_angle + angle_offset);
@@ -252,15 +249,11 @@ SLAM::CsmData SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::Matrix
     }
 
     for (float x_offset = -FLAGS_csm_transl_max; x_offset < FLAGS_csm_transl_max; x_offset += FLAGS_csm_transl_step) {
-      
-      //std::cout << x_offset << "\n";
 
       float log_likelihood_odom_x = odom_x_pdf_const - 0.5 * pow(abs(x_offset)/FLAGS_sd_odom_x, 2);
       float x = rel_odom_loc[0] + x_offset;
 
       for (float y_offset = -FLAGS_csm_transl_max; y_offset < FLAGS_csm_transl_max; y_offset += FLAGS_csm_transl_step) {
-        
-        //std::cout << RadToDeg(angle_offset) << "  " << x_offset << "  " << y_offset << "\n";
 
         float log_likelihood_odom_y = odom_y_pdf_const - 0.5 * pow(abs(y_offset)/FLAGS_sd_odom_y, 2);
         float y = rel_odom_loc[1] + y_offset;
@@ -286,8 +279,6 @@ SLAM::CsmData SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::Matrix
 
         // Evaluate log likelihood of each
         // // Raster log likelihood PLUS odometry log likelihood
-
-        //std::cout << x_offset << "  " << odom_log_likelihood << "\n";
 
         float log_likelihood = odom_log_likelihood + raster_score;
         if (log_likelihood > results.log_likelihood) {
