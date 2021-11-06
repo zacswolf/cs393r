@@ -46,8 +46,8 @@ DEFINE_double(sd_odom_angle, 30.0, "Std dev of odometry in x direction");
 
 DEFINE_double(raster_map_dist, 12.0, "Maximum distance of x & y axes in the rasterized map");
 DEFINE_double(raster_pixel_dist, 0.025, "Size of each pixel in the raster map");
-DEFINE_double(csm_transl_max, .5, "Max translation for CSM");
-DEFINE_double(csm_angle_max, 20, "Max rotation for CSM");
+DEFINE_double(csm_transl_max, 0.6, "Max translation for CSM");
+DEFINE_double(csm_angle_max, 25, "Max rotation for CSM");
 DEFINE_double(csm_transl_step, 0.05, "Translation step size for CSM");
 DEFINE_double(csm_angle_step, 0.05, "Rotation step size for CSM");
 
@@ -78,9 +78,7 @@ SLAM::SLAM() :
     odom_initialized_(false),
     current_odom_loc_(0, 0),
     current_odom_angle_(0),
-    pose_initialized_(false) {
-      debug_flag = 1;
-    }
+    pose_initialized_(false) {}
 
 void SLAM::GetPose(Eigen::Vector2f* loc, float* angle) const {
   // Return the latest pose estimate of the robot.
@@ -105,10 +103,10 @@ std::vector<Eigen::Vector2f> SLAM::ScanToPointCloud(
   const int num_rays = (int) ranges.size();
   const Vector2f kLaserLoc(0.2, 0); // Relative to car
   const float angle_increment = (angle_max - angle_min)/(num_rays-1);
-  //std::cout << range_max << "  " << FLAGS_raster_map_dist;
+
   for (int i = 0; i < num_rays; i++) {
     float range = ranges[i];
-    if (range >= range_min && range <= range_max-0.01) {
+    if (range > range_min && range < range_max) {
       float angle = angle_min + i * angle_increment;
       Vector2f laser_loc = range * Vector2f(cos(angle), sin(angle)) + kLaserLoc;
       point_cloud.push_back(laser_loc);
@@ -142,11 +140,9 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
     float angle_diff = AngleDiff(current_odom_angle_, prev_odom_angle_);
     Eigen::Vector2f loc_diff = current_odom_loc_ - prev_odom_loc_;
 
-    if (debug_flag && odom_initialized_ && (loc_diff.norm() > FLAGS_min_odom_loc_diff || RadToDeg(abs(angle_diff)) > FLAGS_min_odom_angle_diff)) {
+    if (odom_initialized_ && (loc_diff.norm() > FLAGS_min_odom_loc_diff || RadToDeg(abs(angle_diff)) > FLAGS_min_odom_angle_diff)) {
       std::cout << "Loc Diff: " << loc_diff.norm() << "\n";
       std::cout << "Angle Diff: " << RadToDeg(angle_diff) << "\n";
-      //debug_flag = 0;
-
       std::cout << "Using laser scan!\n";
 
       // Compute best pose
@@ -162,16 +158,13 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
       Eigen::Rotation2Df rotation_pose(prev_poses_.back().angle);
       pose.angle = AngleMod(csm_data.angle + prev_poses_.back().angle);
       pose.loc = rotation_pose * csm_data.loc + prev_poses_.back().loc;
-      //pose.point_cloud = point_cloud;
+      
       std::vector<Eigen::Vector2f> empty_point_cloud;
       pose.point_cloud = empty_point_cloud;
 
       prev_point_cloud_ = point_cloud;
 
       Eigen::Rotation2Df rotation_new_pose(pose.angle);
-      // for (auto& point : point_cloud) {
-      //   point = rotation_new_pose * point + pose.loc;
-      // }
 
       // Add new pose
       int count = 0;
