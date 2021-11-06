@@ -344,8 +344,8 @@ void Navigation::Run() {
   global_viz_msg_.header.stamp = ros::Time::now();
   drive_msg_.header.stamp = ros::Time::now();
   // Publish messages.
-  viz_pub_.publish(local_viz_msg_);
-  viz_pub_.publish(global_viz_msg_);
+  //viz_pub_.publish(local_viz_msg_);
+  //viz_pub_.publish(global_viz_msg_);
   drive_pub_.publish(drive_msg_);
 }
 

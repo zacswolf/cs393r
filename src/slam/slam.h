@@ -98,8 +98,9 @@ class SLAM {
   struct PoseData {
     Eigen::Vector2f loc;
     float angle;
-    std::vector<Eigen::Vector2f> point_cloud;
   };
+
+  std::vector<Eigen::Vector2f> map_;
 
   std::vector<PoseData> prev_poses_;
   std::vector<Eigen::Vector2f> prev_point_cloud_;
