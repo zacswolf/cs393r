@@ -89,7 +89,7 @@ SLAM::SLAM() :
 
 void SLAM::GetPose(Eigen::Vector2f* loc, float* angle) const {
   // Return the latest pose estimate of the robot.
-  if (!pose_initialized_){
+  if (!pose_initialized_) {
     *loc = Eigen::Vector2f(0., 0.);
     *angle = 0;
   }
@@ -155,9 +155,16 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
       // Compute best pose
       std::vector<Eigen::Vector2f> point_cloud = ScanToPointCloud(ranges, range_min, range_max, angle_min, angle_max);
       std::cout << "Created point cloud!\n";
-      Eigen::MatrixXf raster = RasterizePointCloud(prev_point_cloud_, false);
-      Eigen::MatrixXf raster_fine = RasterizePointCloud(prev_point_cloud_, true);
+
+      // Create blurred raster
+      Eigen::MatrixXf raster = RasterizePointCloud(prev_point_cloud_, FLAGS_sd_laser);
+
+      // Create fine raster
+      Eigen::MatrixXf raster_fine = RasterizePointCloud(prev_point_cloud_, FLAGS_sd_laser_fine);
+      
       std::cout << "Created raster map!\n";
+
+
       SLAM::CsmData csm_data = CSM(point_cloud, raster, raster_fine);
       std::cout << "Finished CSM!\n\n";
 
@@ -186,15 +193,7 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
 
 }
 
-Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cloud, bool fine_sd) {
-  
-  float sd_laser;
-
-  if (fine_sd) {
-    sd_laser = FLAGS_sd_laser_fine;
-  } else {
-    sd_laser = FLAGS_sd_laser;
-  }
+Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cloud, float sd_laser) {
 
   // float min_value = std::numeric_limits<float>::lowest();
   float min_value = -10;
@@ -327,9 +326,9 @@ SLAM::CsmData SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::Matrix
                  FLAGS_csm_transl_max, FLAGS_csm_transl_step, rel_odom_loc);
 
   // Fine CSM
-  static const float csm_angle_fine_max = 1.5*DegToRad(FLAGS_csm_angle_step);
+  static const float csm_angle_fine_max = 1.5*DegToRad(FLAGS_csm_angle_max);
   static const float csm_angle_fine_step = DegToRad(FLAGS_csm_angle_fine_step);
-  static const float csm_transl_fine_max = 1.5*FLAGS_csm_transl_step;
+  static const float csm_transl_fine_max = 1.5*FLAGS_csm_transl_max;
   static const float csm_transl_fine_step = FLAGS_csm_transl_fine_step;
 
   results = CSM_Search(sampled_point_cloud, raster_fine,

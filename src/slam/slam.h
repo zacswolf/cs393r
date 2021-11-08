@@ -55,7 +55,9 @@ class SLAM {
   // Get latest robot pose.
   void GetPose(Eigen::Vector2f* loc, float* angle) const;
 
-  // Our functions
+  private:
+
+  // Our methods
 
   // Convert scan to point cloud
   std::vector<Eigen::Vector2f> ScanToPointCloud(
@@ -67,7 +69,7 @@ class SLAM {
 
   // Rasterize into our map
   // MatrixXf is of dimention raster_map_dist/raster_dist
-  Eigen::MatrixXf RasterizePointCloud(const std::vector<Eigen::Vector2f> point_cloud, bool fine_sd);
+  Eigen::MatrixXf RasterizePointCloud(const std::vector<Eigen::Vector2f> point_cloud, float sd_laser);
 
 
   struct CsmData {
@@ -79,13 +81,13 @@ class SLAM {
   // Correlative Scan Matching
   CsmData CSM(const std::vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster, Eigen::MatrixXf raster_fine);
 
- private:
-
-  const int num_pixels_;
-
   CsmData CSM_Search(std::vector<Eigen::Vector2f> sampled_point_cloud, Eigen::MatrixXf raster,
                  float angle_offset_max, float angle_offset_step, float angle_est, 
                  float transl_offset_max, float transl_offset_step, Eigen::Vector2f transl_est);
+
+  // Member variables
+
+  const int num_pixels_;
 
   // Previous odometry-reported locations.
   Eigen::Vector2f prev_odom_loc_;
