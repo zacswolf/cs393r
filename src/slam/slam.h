@@ -72,18 +72,18 @@ class SLAM {
   Eigen::MatrixXf RasterizePointCloud(const std::vector<Eigen::Vector2f> point_cloud, float sd_laser);
 
 
-  struct CsmData {
+  // Our pose representation
+  struct Pose {
     Eigen::Vector2f loc;
     float angle;
-    float log_likelihood;
   };
 
   // Correlative Scan Matching
-  CsmData CSM(const std::vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster, Eigen::MatrixXf raster_fine);
+  Pose CSM(const std::vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster, Eigen::MatrixXf raster_fine);
 
-  CsmData CSM_Search(std::vector<Eigen::Vector2f> sampled_point_cloud, Eigen::MatrixXf raster,
-                 float angle_offset_max, float angle_offset_step, float angle_est, 
-                 float transl_offset_max, float transl_offset_step, Eigen::Vector2f transl_est);
+  Pose CSM_Search(std::vector<Eigen::Vector2f> sampled_point_cloud, Eigen::MatrixXf raster, Pose pose_est,
+                 float angle_offset_max, float angle_offset_step,
+                 float transl_offset_max, float transl_offset_step);
 
   // Member variables
 
@@ -100,15 +100,10 @@ class SLAM {
 
   // Previous pose
   bool pose_initialized_;
-  
-  struct PoseData {
-    Eigen::Vector2f loc;
-    float angle;
-  };
 
   std::vector<Eigen::Vector2f> map_;
 
-  std::vector<PoseData> prev_poses_;
+  std::vector<Pose> prev_poses_;
   std::vector<Eigen::Vector2f> prev_point_cloud_;
 
   int odom_counter_;
