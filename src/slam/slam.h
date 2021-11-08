@@ -76,9 +76,9 @@ class SLAM {
   };
 
   // Correlative Scan Matching
-  Pose CSM(const std::vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster, Eigen::MatrixXf raster_fine);
+  Pose Csm(const std::vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster, Eigen::MatrixXf raster_fine);
 
-  Pose CSM_Search(std::vector<Eigen::Vector2f> sampled_point_cloud, Eigen::MatrixXf raster, Pose pose_est,
+  Pose CsmSearch(std::vector<Eigen::Vector2f> sampled_point_cloud, Eigen::MatrixXf raster, Pose pose_est,
                  float angle_offset_max, float angle_offset_step,
                  float transl_offset_max, float transl_offset_step);
 
