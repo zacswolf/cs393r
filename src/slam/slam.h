@@ -89,17 +89,16 @@ class SLAM {
 
   const int num_pixels_;
 
-  // Previous odometry-reported locations.
-  Eigen::Vector2f prev_odom_loc_;
-  float prev_odom_angle_;
   bool odom_initialized_;
+  bool pose_initialized_;
 
   // Current odometry-reported locations.
   Eigen::Vector2f current_odom_loc_;
   float current_odom_angle_;
 
-  // Previous pose
-  bool pose_initialized_;
+  // Previous pose odometry-reported locations
+  Eigen::Vector2f prev_pose_odom_loc_;
+  float prev_pose_odom_angle_;
 
   std::vector<Eigen::Vector2f> map_;
 

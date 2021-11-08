@@ -46,6 +46,8 @@ DEFINE_double(raster_map_dist, 12.0, "Maximum distance of x & y axes in the rast
 DEFINE_double(raster_pixel_dist, 0.01, "Size of each pixel in the raster map");
 DEFINE_double(sd_laser_blur, 0.25, "Std dev of laser scan for blurred raster");
 DEFINE_double(sd_laser_fine, 0.025, "Std dev of laser scan for fine raster");
+// Q: Should fine and blur have diff raster windows
+DEFINE_int32(raster_window, 20, "Number of raster pixels in each direction that a point's pdf effects"); 
 
 // CSM
 DEFINE_double(sd_odom_x, 1.0, "Std dev of odometry in x direction");
@@ -54,9 +56,9 @@ DEFINE_double(sd_odom_angle, 30.0, "Std dev of odometry angle");
 
 DEFINE_double(csm_transl_max, 0.8, "Max translation for CSM");
 DEFINE_double(csm_angle_max, 30, "Max rotation for CSM");
-DEFINE_double(csm_transl_step, 0.1, "Translation step size for CSM");
+DEFINE_double(csm_transl_blur_step, 0.1, "Translation step size for CSM");
 DEFINE_double(csm_transl_fine_step, 0.01, "Translation step size for CSM");
-DEFINE_double(csm_angle_step, 1, "Rotation step size for CSM");
+DEFINE_double(csm_angle_blur_step, 1, "Rotation step size for CSM");
 DEFINE_double(csm_angle_fine_step, 0.05, "Rotation step size for CSM");
 
 
@@ -82,12 +84,12 @@ namespace slam {
 
 SLAM::SLAM() :
     num_pixels_((int)((2. * FLAGS_raster_map_dist)/FLAGS_raster_pixel_dist)),
-    prev_odom_loc_(0, 0),
-    prev_odom_angle_(0),
     odom_initialized_(false),
+    pose_initialized_(false),
     current_odom_loc_(0, 0),
     current_odom_angle_(0),
-    pose_initialized_(false),
+    prev_pose_odom_loc_(0, 0),
+    prev_pose_odom_angle_(0),
     odom_counter_(16) {}
 
 void SLAM::GetPose(Eigen::Vector2f* loc, float* angle) const {
@@ -95,10 +97,11 @@ void SLAM::GetPose(Eigen::Vector2f* loc, float* angle) const {
   if (!pose_initialized_) {
     *loc = Eigen::Vector2f(0., 0.);
     *angle = 0;
+  } else {
+    auto prev_pose = prev_poses_.back();
+    *loc = prev_pose.loc;
+    *angle = prev_pose.angle;
   }
-  auto prev_pose = prev_poses_.back();
-  *loc = prev_pose.loc;
-  *angle = prev_pose.angle;
 }
 
 std::vector<Eigen::Vector2f> SLAM::ScanToPointCloud(
@@ -136,21 +139,22 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
   // for SLAM. If decided to add, align it to the scan from the last saved pose,
   // and save both the scan and the optimized pose.
   
-  // Add a new pose when odom dist is >50cm or odom angle diff >30deg
 
   if (!pose_initialized_) {
-    std::vector<Eigen::Vector2f> point_cloud = ScanToPointCloud(ranges, range_min, range_max, angle_min, angle_max);
+    prev_point_cloud_ = ScanToPointCloud(ranges, range_min, range_max, angle_min, angle_max);
     prev_poses_.push_back(SLAM::Pose{Eigen::Vector2f(0, 0), 0});
-    prev_point_cloud_ = point_cloud;
+
+
+    
+
     pose_initialized_ = true;
-
     std::cout << "Pose initialized!\n\n";
-  } else {
+  } else if (odom_initialized_) {
+    float angle_diff = AngleDiff(current_odom_angle_, prev_pose_odom_angle_);
+    Eigen::Vector2f loc_diff = current_odom_loc_ - prev_pose_odom_loc_;
 
-    float angle_diff = AngleDiff(current_odom_angle_, prev_odom_angle_);
-    Eigen::Vector2f loc_diff = current_odom_loc_ - prev_odom_loc_;
-
-    if (odom_initialized_ && (loc_diff.norm() > FLAGS_min_odom_loc_diff || RadToDeg(abs(angle_diff)) > FLAGS_min_odom_angle_diff)) {
+      // Add a new pose when odom dist or angle diff is above threshhold
+    if (loc_diff.norm() > FLAGS_min_odom_loc_diff || RadToDeg(abs(angle_diff)) > FLAGS_min_odom_angle_diff) {
       std::cout << "Loc Diff: " << loc_diff.norm() << "\n";
       std::cout << "Angle Diff: " << RadToDeg(angle_diff) << "\n";
       std::cout << "Using laser scan!\n";
@@ -191,9 +195,9 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
         map_.push_back(new_point);
       }
 
-      // Update Odom
-      prev_odom_angle_ = current_odom_angle_;
-      prev_odom_loc_ = current_odom_loc_;
+      // Update previous pose odom
+      prev_pose_odom_angle_ = current_odom_angle_;
+      prev_pose_odom_loc_ = current_odom_loc_;
     }
   }
 
@@ -201,19 +205,21 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
 
 Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cloud, float sd_laser) {
 
-  // float min_value = std::numeric_limits<float>::lowest();
-  float min_value = -10;
+  float min_value = -10; // std::numeric_limits<float>::lowest();
   Eigen::MatrixXf raster = Eigen::MatrixXf::Constant(num_pixels_, num_pixels_, min_value);
 
   // Compute max log likelihood of every point in the map (max from each point in point cloud)
   static const float gaussian_pdf_const = -log(sd_laser) - 0.5 * log(2 * M_PI);
   for (auto& pt : point_cloud) {
+
+    // Convert point to raster index 
     Eigen::Vector2i raster_loc = ((pt.array() + FLAGS_raster_map_dist)/FLAGS_raster_pixel_dist).cast<int>();
+    
     // Clamp
-    int index_x_min = Clamp(raster_loc[0] - 20, 0, num_pixels_ - 1);
-    int index_x_max = Clamp(raster_loc[0] + 20, 0, num_pixels_ - 1);
-    int index_y_min = Clamp(raster_loc[1] - 20, 0, num_pixels_ - 1);
-    int index_y_max = Clamp(raster_loc[1] + 20, 0, num_pixels_ - 1);
+    int index_x_min = Clamp(raster_loc[0] - FLAGS_raster_window, 0, num_pixels_ - 1);
+    int index_x_max = Clamp(raster_loc[0] + FLAGS_raster_window, 0, num_pixels_ - 1);
+    int index_y_min = Clamp(raster_loc[1] - FLAGS_raster_window, 0, num_pixels_ - 1);
+    int index_y_max = Clamp(raster_loc[1] + FLAGS_raster_window, 0, num_pixels_ - 1);
 
     for (int x_ind = index_x_min; x_ind <= index_x_max; x_ind++) {
       for (int y_ind = index_y_min; y_ind <= index_y_max; y_ind++) {
@@ -281,9 +287,12 @@ SLAM::Pose SLAM::CSM_Search(std::vector<Eigen::Vector2f> sampled_point_cloud, Ei
         for (auto& point : rotated_point_cloud) {
           // Relative to previous odometry
           Eigen::Vector2f tranformed_point = point + loc;
+
+          // Convert transformed point to raster index
           Eigen::Vector2i raster_loc = ((tranformed_point.array() + FLAGS_raster_map_dist)/FLAGS_raster_pixel_dist).cast<int>();
 
-          // Clamp
+          // Clamp raster loc
+          // Q: Is this necessary? Shouldn't we throw out points that go over the clamp
           int index_x = Clamp(raster_loc[0], 0, num_pixels_ - 1);
           int index_y = Clamp(raster_loc[1], 0, num_pixels_ - 1);
 
@@ -311,28 +320,27 @@ SLAM::Pose SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf 
   // Iterate through angle, dx, and dy
   // Center the search around our odomety position
 
-  // Reduce Number of points in our point cloud
+  // Reduce number of points in our point cloud
   vector<Vector2f> sampled_point_cloud;
-
   for (uint i = 0; i < point_cloud.size(); i += FLAGS_csm_scan_mod) {
     sampled_point_cloud.push_back(point_cloud[i]);
   }
 
   // Compute pose relative to last pose based on odometry
-  const Eigen::Rotation2Df rotation_odom(-prev_odom_angle_);
- 
-  Eigen::Vector2f rel_odom_loc = rotation_odom * (current_odom_loc_ - prev_odom_loc_);
-  float rel_odom_angle = AngleDiff(current_odom_angle_, prev_odom_angle_);
+  const Eigen::Rotation2Df rotation_odom(-prev_pose_odom_angle_);
+
+  Eigen::Vector2f rel_odom_loc = rotation_odom * (current_odom_loc_ - prev_pose_odom_loc_);
+  float rel_odom_angle = AngleDiff(current_odom_angle_, prev_pose_odom_angle_);
   
   SLAM::Pose odom_pose = SLAM::Pose{rel_odom_loc, rel_odom_angle};
 
   // Coarse CSM
   static const float csm_angle_max = DegToRad(FLAGS_csm_angle_max);
-  static const float csm_angle_step = DegToRad(FLAGS_csm_angle_step);
+  static const float csm_angle_step = DegToRad(FLAGS_csm_angle_blur_step);
 
-  SLAM::Pose results = CSM_Search(sampled_point_cloud, raster, odom_pose,
+  SLAM::Pose csm_pose = CSM_Search(sampled_point_cloud, raster, odom_pose,
                  csm_angle_max, csm_angle_step, 
-                 FLAGS_csm_transl_max, FLAGS_csm_transl_step);
+                 FLAGS_csm_transl_max, FLAGS_csm_transl_blur_step);
 
   // Fine CSM
   static const float csm_angle_fine_max = 1.5*DegToRad(FLAGS_csm_angle_max);
@@ -340,29 +348,26 @@ SLAM::Pose SLAM::CSM(const vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf 
   static const float csm_transl_fine_max = 1.5*FLAGS_csm_transl_max;
   static const float csm_transl_fine_step = FLAGS_csm_transl_fine_step;
 
-  results = CSM_Search(sampled_point_cloud, raster_fine, results,
+  csm_pose = CSM_Search(sampled_point_cloud, raster_fine, csm_pose,
                 csm_angle_fine_max, csm_angle_fine_step, 
                 csm_transl_fine_max, csm_transl_fine_step);
-
-  // Select pose with max log likelihood
   
-  return results;
+  return csm_pose;
 }
 
 void SLAM::ObserveOdometry(const Vector2f& odom_loc, const float odom_angle) {
   if (!odom_initialized_ && odom_counter_ <= 0) {
     std::cout << "Initializing odom! \n";
-    prev_odom_angle_ = odom_angle;
-    prev_odom_loc_ = odom_loc;
+    prev_pose_odom_angle_ = odom_angle;
+    prev_pose_odom_loc_ = odom_loc;
     odom_initialized_ = true;
     return;
-  } else {
-    odom_counter_--;
   }
 
-  // Keep track of odometry to estimate how far the robot has moved between 
-  // poses.
+  // Note: We found that Odom is improperly initialized unless if we wait so thats what odom_counter does
+  odom_counter_ -= !odom_initialized_;
 
+  // Keep track of odometry to estimate how far the robot has moved between poses.
   current_odom_angle_ = odom_angle;
   current_odom_loc_ = odom_loc;
 }
