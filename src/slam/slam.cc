@@ -367,7 +367,6 @@ void SLAM::ObserveOdometry(const Vector2f& odom_loc, const float odom_angle) {
     prev_pose_odom_angle_ = odom_angle;
     prev_pose_odom_loc_ = odom_loc;
     odom_initialized_ = true;
-    return;
   }
 
   // Note: We found that Odom is improperly initialized unless if we wait so thats what odom_counter does
