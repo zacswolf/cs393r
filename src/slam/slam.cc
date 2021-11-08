@@ -83,14 +83,13 @@ using math_util::Clamp;
 namespace slam {
 
 SLAM::SLAM() :
-    num_pixels_((int)((2. * FLAGS_raster_map_dist)/FLAGS_raster_pixel_dist)),
     odom_initialized_(false),
+    odom_counter_(16),
     pose_initialized_(false),
     current_odom_loc_(0, 0),
     current_odom_angle_(0),
     prev_pose_odom_loc_(0, 0),
-    prev_pose_odom_angle_(0),
-    odom_counter_(16) {}
+    prev_pose_odom_angle_(0) {}
 
 void SLAM::GetPose(Eigen::Vector2f* loc, float* angle) const {
   // Return the latest pose estimate of the robot.
@@ -141,11 +140,15 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
   
 
   if (!pose_initialized_) {
-    prev_point_cloud_ = ScanToPointCloud(ranges, range_min, range_max, angle_min, angle_max);
+    std::vector<Eigen::Vector2f> point_cloud = ScanToPointCloud(ranges, range_min, range_max, angle_min, angle_max);
+    
+    prev_pose_point_cloud_ = point_cloud;
     prev_poses_.push_back(SLAM::Pose{Eigen::Vector2f(0, 0), 0});
 
-
-    
+    // Add first point cloud to map_
+    for (uint i = 0; i < point_cloud.size(); i += FLAGS_map_scan_mod) {
+        map_.push_back(point_cloud[i]);
+    }
 
     pose_initialized_ = true;
     std::cout << "Pose initialized!\n\n";
@@ -164,10 +167,10 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
       std::cout << "Created point cloud!\n";
 
       // Create blurred raster
-      Eigen::MatrixXf raster = RasterizePointCloud(prev_point_cloud_, FLAGS_sd_laser_blur);
+      Eigen::MatrixXf raster = RasterizePointCloud(prev_pose_point_cloud_, FLAGS_sd_laser_blur);
 
       // Create fine raster
-      Eigen::MatrixXf raster_fine = RasterizePointCloud(prev_point_cloud_, FLAGS_sd_laser_fine);
+      Eigen::MatrixXf raster_fine = RasterizePointCloud(prev_pose_point_cloud_, FLAGS_sd_laser_fine);
       
       std::cout << "Created raster map!\n";
 
@@ -183,7 +186,7 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
       pose.loc = rotation_pose * rel_prev_pose.loc + prev_pose.loc;
 
       // Save current pose's point cloud for future raster
-      prev_point_cloud_ = point_cloud;
+      prev_pose_point_cloud_ = point_cloud;
 
       // Save current pose 
       prev_poses_.push_back(pose);
@@ -205,8 +208,10 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
 
 Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cloud, float sd_laser) {
 
+  static const int raster_dim_ = (int)((2. * FLAGS_raster_map_dist)/FLAGS_raster_pixel_dist);
+
   float min_value = -10; // std::numeric_limits<float>::lowest();
-  Eigen::MatrixXf raster = Eigen::MatrixXf::Constant(num_pixels_, num_pixels_, min_value);
+  Eigen::MatrixXf raster = Eigen::MatrixXf::Constant(raster_dim_, raster_dim_, min_value);
 
   // Compute max log likelihood of every point in the map (max from each point in point cloud)
   static const float gaussian_pdf_const = -log(sd_laser) - 0.5 * log(2 * M_PI);
@@ -216,10 +221,10 @@ Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cl
     Eigen::Vector2i raster_loc = ((pt.array() + FLAGS_raster_map_dist)/FLAGS_raster_pixel_dist).cast<int>();
     
     // Clamp
-    int index_x_min = Clamp(raster_loc[0] - FLAGS_raster_window, 0, num_pixels_ - 1);
-    int index_x_max = Clamp(raster_loc[0] + FLAGS_raster_window, 0, num_pixels_ - 1);
-    int index_y_min = Clamp(raster_loc[1] - FLAGS_raster_window, 0, num_pixels_ - 1);
-    int index_y_max = Clamp(raster_loc[1] + FLAGS_raster_window, 0, num_pixels_ - 1);
+    int index_x_min = Clamp(raster_loc[0] - FLAGS_raster_window, 0, raster_dim_ - 1);
+    int index_x_max = Clamp(raster_loc[0] + FLAGS_raster_window, 0, raster_dim_ - 1);
+    int index_y_min = Clamp(raster_loc[1] - FLAGS_raster_window, 0, raster_dim_ - 1);
+    int index_y_max = Clamp(raster_loc[1] + FLAGS_raster_window, 0, raster_dim_ - 1);
 
     for (int x_ind = index_x_min; x_ind <= index_x_max; x_ind++) {
       for (int y_ind = index_y_min; y_ind <= index_y_max; y_ind++) {
@@ -293,8 +298,8 @@ SLAM::Pose SLAM::CSM_Search(std::vector<Eigen::Vector2f> sampled_point_cloud, Ei
 
           // Clamp raster loc
           // Q: Is this necessary? Shouldn't we throw out points that go over the clamp
-          int index_x = Clamp(raster_loc[0], 0, num_pixels_ - 1);
-          int index_y = Clamp(raster_loc[1], 0, num_pixels_ - 1);
+          int index_x = Clamp(raster_loc[0], 0, (int)raster.cols() - 1);
+          int index_y = Clamp(raster_loc[1], 0, (int)raster.rows() - 1);
 
           raster_score += raster(index_x, index_y);
         }

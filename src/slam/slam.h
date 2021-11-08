@@ -55,10 +55,7 @@ class SLAM {
   // Get latest robot pose.
   void GetPose(Eigen::Vector2f* loc, float* angle) const;
 
-  private:
-
-  // Our methods
-
+ private:
   // Convert scan to point cloud
   std::vector<Eigen::Vector2f> ScanToPointCloud(
                     const std::vector<float>& ranges,
@@ -87,25 +84,27 @@ class SLAM {
 
   // Member variables
 
-  const int num_pixels_;
-
   bool odom_initialized_;
+  int odom_counter_;
+
   bool pose_initialized_;
 
   // Current odometry-reported locations.
   Eigen::Vector2f current_odom_loc_;
   float current_odom_angle_;
 
-  // Previous pose odometry-reported locations
+  // Previous pose's odometry-reported locations
   Eigen::Vector2f prev_pose_odom_loc_;
   float prev_pose_odom_angle_;
 
+  // Previous pose's point cloud, relative to previous pose
+  std::vector<Eigen::Vector2f> prev_pose_point_cloud_;
+
+  // Map of the world that is being built, relative to the first pose
   std::vector<Eigen::Vector2f> map_;
 
+  // Ordered collection of previous poses, relative to the first pose
   std::vector<Pose> prev_poses_;
-  std::vector<Eigen::Vector2f> prev_point_cloud_;
-
-  int odom_counter_;
 
 };
 }  // namespace slam
