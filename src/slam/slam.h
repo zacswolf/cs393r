@@ -28,9 +28,12 @@
 #ifndef SRC_SLAM_H_
 #define SRC_SLAM_H_
 
+
 namespace slam {
 
+
 class SLAM {
+
  public:
   // Default Constructor.
   SLAM();
@@ -53,11 +56,56 @@ class SLAM {
   void GetPose(Eigen::Vector2f* loc, float* angle) const;
 
  private:
+  // Convert scan to point cloud
+  std::vector<Eigen::Vector2f> ScanToPointCloud(
+                    const std::vector<float>& ranges,
+                    float range_min,
+                    float range_max,
+                    float angle_min,
+                    float angle_max);
 
-  // Previous odometry-reported locations.
-  Eigen::Vector2f prev_odom_loc_;
-  float prev_odom_angle_;
+  // Rasterize into our map
+  // MatrixXf is of dimention raster_map_dist/raster_dist
+  Eigen::MatrixXf RasterizePointCloud(const std::vector<Eigen::Vector2f> point_cloud, float sd_laser);
+
+
+  // Our pose representation
+  struct Pose {
+    Eigen::Vector2f loc;
+    float angle;
+  };
+
+  // Correlative Scan Matching
+  Pose Csm(const std::vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster, Eigen::MatrixXf raster_fine);
+
+  Pose CsmSearch(std::vector<Eigen::Vector2f> sampled_point_cloud, Eigen::MatrixXf raster, Pose pose_est,
+                 float angle_offset_max, float angle_offset_step,
+                 float transl_offset_max, float transl_offset_step);
+
+  // Member variables
+
   bool odom_initialized_;
+  int odom_counter_;
+
+  bool pose_initialized_;
+
+  // Current odometry-reported locations.
+  Eigen::Vector2f current_odom_loc_;
+  float current_odom_angle_;
+
+  // Previous pose's odometry-reported locations
+  Eigen::Vector2f prev_pose_odom_loc_;
+  float prev_pose_odom_angle_;
+
+  // Previous pose's point cloud, relative to previous pose
+  std::vector<Eigen::Vector2f> prev_pose_point_cloud_;
+
+  // Map of the world that is being built, relative to the first pose
+  std::vector<Eigen::Vector2f> map_;
+
+  // Ordered collection of previous poses, relative to the first pose
+  std::vector<Pose> prev_poses_;
+
 };
 }  // namespace slam
 
