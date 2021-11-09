@@ -245,6 +245,46 @@ Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cl
   return raster;
 }
 
+SLAM::Pose SLAM::Csm(const vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster_blur, Eigen::MatrixXf raster_sharp) {
+  // Iterate through angle, dx, and dy
+  // Center the search around our odomety position
+
+  // Reduce number of points in our point cloud
+  vector<Vector2f> sampled_point_cloud;
+  for (uint i = 0; i < point_cloud.size(); i += FLAGS_csm_scan_mod) {
+    sampled_point_cloud.push_back(point_cloud[i]);
+  }
+
+  // Compute pose relative to last pose based on odometry
+  const Eigen::Rotation2Df rotation_odom(-prev_pose_odom_angle_);
+
+  Eigen::Vector2f rel_odom_loc = rotation_odom * (current_odom_loc_ - prev_pose_odom_loc_);
+  float rel_odom_angle = AngleDiff(current_odom_angle_, prev_pose_odom_angle_);
+
+  SLAM::Pose odom_pose = SLAM::Pose{rel_odom_loc, rel_odom_angle};
+
+  // Coarse CSM
+  static const float csm_angle_coarse_step = DegToRad(FLAGS_csm_angle_coarse_step);
+  static const float csm_angle_coarse_max = DegToRad(FLAGS_csm_angle_coarse_max);
+
+  SLAM::Pose csm_pose = CsmSearch(sampled_point_cloud, raster_blur, odom_pose,
+                 csm_angle_coarse_max, csm_angle_coarse_step,
+                 FLAGS_csm_transl_coarse_max, FLAGS_csm_transl_coarse_step);
+
+  // Fine CSM
+  static const float csm_angle_fine_step = DegToRad(FLAGS_csm_angle_fine_step);
+  static const float csm_transl_fine_step = FLAGS_csm_transl_fine_step;
+  // Make the window based off of the step size of the coarse step
+  static const float csm_angle_fine_max = FLAGS_csm_fine_max_multiplier*csm_angle_coarse_step;
+  static const float csm_transl_fine_max = FLAGS_csm_fine_max_multiplier*FLAGS_csm_transl_coarse_step;
+
+  csm_pose = CsmSearch(sampled_point_cloud, raster_sharp, csm_pose,
+                csm_angle_fine_max, csm_angle_fine_step,
+                csm_transl_fine_max, csm_transl_fine_step);
+
+  return csm_pose;
+}
+
 SLAM::Pose SLAM::CsmSearch(std::vector<Eigen::Vector2f> sampled_point_cloud, Eigen::MatrixXf raster, SLAM::Pose pose_est,
                  float angle_offset_max, float angle_offset_step, 
                  float transl_offset_max, float transl_offset_step) {
@@ -319,47 +359,6 @@ SLAM::Pose SLAM::CsmSearch(std::vector<Eigen::Vector2f> sampled_point_cloud, Eig
   }
 
   return results;
-}
-
-SLAM::Pose SLAM::Csm(const vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster_blur, Eigen::MatrixXf raster_sharp) {
-  
-  // Iterate through angle, dx, and dy
-  // Center the search around our odomety position
-
-  // Reduce number of points in our point cloud
-  vector<Vector2f> sampled_point_cloud;
-  for (uint i = 0; i < point_cloud.size(); i += FLAGS_csm_scan_mod) {
-    sampled_point_cloud.push_back(point_cloud[i]);
-  }
-
-  // Compute pose relative to last pose based on odometry
-  const Eigen::Rotation2Df rotation_odom(-prev_pose_odom_angle_);
-
-  Eigen::Vector2f rel_odom_loc = rotation_odom * (current_odom_loc_ - prev_pose_odom_loc_);
-  float rel_odom_angle = AngleDiff(current_odom_angle_, prev_pose_odom_angle_);
-  
-  SLAM::Pose odom_pose = SLAM::Pose{rel_odom_loc, rel_odom_angle};
-
-  // Coarse CSM
-  static const float csm_angle_coarse_step = DegToRad(FLAGS_csm_angle_coarse_step);
-  static const float csm_angle_coarse_max = DegToRad(FLAGS_csm_angle_coarse_max);
-
-  SLAM::Pose csm_pose = CsmSearch(sampled_point_cloud, raster_blur, odom_pose,
-                 csm_angle_coarse_max, csm_angle_coarse_step, 
-                 FLAGS_csm_transl_coarse_max, FLAGS_csm_transl_coarse_step);
-
-  // Fine CSM
-  static const float csm_angle_fine_step = DegToRad(FLAGS_csm_angle_fine_step);
-  static const float csm_transl_fine_step = FLAGS_csm_transl_fine_step;
-  // Make the window based off of the step size of the coarse step
-  static const float csm_angle_fine_max = FLAGS_csm_fine_max_multiplier*csm_angle_coarse_step;
-  static const float csm_transl_fine_max = FLAGS_csm_fine_max_multiplier*FLAGS_csm_transl_coarse_step;
-
-  csm_pose = CsmSearch(sampled_point_cloud, raster_sharp, csm_pose,
-                csm_angle_fine_max, csm_angle_fine_step, 
-                csm_transl_fine_max, csm_transl_fine_step);
-  
-  return csm_pose;
 }
 
 void SLAM::ObserveOdometry(const Vector2f& odom_loc, const float odom_angle) {
