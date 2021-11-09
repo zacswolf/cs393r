@@ -55,12 +55,13 @@ DEFINE_double(sd_odom_x, 1.0, "Std dev of odometry in x direction");
 DEFINE_double(sd_odom_y, 1.0, "Std dev of odometry in y direction");
 DEFINE_double(sd_odom_angle, 30.0, "Std dev of odometry angle");
 
-DEFINE_double(csm_transl_max, 0.8, "Max translation for CSM");
-DEFINE_double(csm_angle_max, 30, "Max rotation for CSM");
-DEFINE_double(csm_transl_blur_step, 0.1, "Translation step size for CSM");
-DEFINE_double(csm_transl_fine_step, 0.01, "Translation step size for CSM");
-DEFINE_double(csm_angle_blur_step, 1, "Rotation step size for CSM");
-DEFINE_double(csm_angle_fine_step, 0.05, "Rotation step size for CSM");
+DEFINE_double(csm_transl_coarse_max, 0.8, "Max translation for coarse CSM");
+DEFINE_double(csm_angle_coarse_max, 30, "Max rotation for coarse CSM");
+DEFINE_double(csm_fine_max_multiplier, 1.5, "Multiplier on coarse step for max translation & rotation for fine CSM");
+DEFINE_double(csm_transl_coarse_step, 0.1, "Translation step size for coarse CSM");
+DEFINE_double(csm_transl_fine_step, 0.01, "Translation step size for fine CSM");
+DEFINE_double(csm_angle_coarse_step, 1, "Rotation step size for coarse CSM");
+DEFINE_double(csm_angle_fine_step, 0.05, "Rotation step size for fine CSM");
 
 
 using namespace math_util;
@@ -341,18 +342,21 @@ SLAM::Pose SLAM::Csm(const vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf 
   SLAM::Pose odom_pose = SLAM::Pose{rel_odom_loc, rel_odom_angle};
 
   // Coarse CSM
-  static const float csm_angle_max = DegToRad(FLAGS_csm_angle_max);
-  static const float csm_angle_step = DegToRad(FLAGS_csm_angle_blur_step);
+  static const float csm_angle_coarse_step = DegToRad(FLAGS_csm_angle_coarse_step);
+  static const float csm_angle_coarse_max = DegToRad(FLAGS_csm_angle_coarse_max);
 
   SLAM::Pose csm_pose = CsmSearch(sampled_point_cloud, raster, odom_pose,
-                 csm_angle_max, csm_angle_step, 
-                 FLAGS_csm_transl_max, FLAGS_csm_transl_blur_step);
+                 csm_angle_coarse_max, csm_angle_coarse_step, 
+                 FLAGS_csm_transl_coarse_max, FLAGS_csm_transl_coarse_step);
 
   // Fine CSM
-  static const float csm_angle_fine_max = 1.5*DegToRad(FLAGS_csm_angle_max);
   static const float csm_angle_fine_step = DegToRad(FLAGS_csm_angle_fine_step);
-  static const float csm_transl_fine_max = 1.5*FLAGS_csm_transl_max;
   static const float csm_transl_fine_step = FLAGS_csm_transl_fine_step;
+  // Make the window based off of the step size of the coarse step
+  static const float csm_angle_fine_max = FLAGS_csm_fine_max_multiplier*csm_angle_coarse_step;
+  static const float csm_transl_fine_max = FLAGS_csm_fine_max_multiplier*FLAGS_csm_transl_coarse_step;
+
+
 
   csm_pose = CsmSearch(sampled_point_cloud, raster_fine, csm_pose,
                 csm_angle_fine_max, csm_angle_fine_step, 
