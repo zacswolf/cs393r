@@ -22,6 +22,8 @@
 #include <vector>
 
 #include "eigen3/Eigen/Dense"
+#include "car.h"
+#include "path.h"
 
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
@@ -59,6 +61,13 @@ class Navigation {
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
 
  private:
+  void forwardPredict(std::vector<Eigen::Vector2f> &point_cloud_pred,
+                      float &vel_pred, float &rel_angle_pred,
+                      Eigen::Vector2f &rel_loc_pred,
+                      std::array<double, COMMAND_MEMORY_LENGTH> previous_vel_,
+                      std::array<double, COMMAND_MEMORY_LENGTH> previous_curv_,
+                      Eigen::Vector2f &goal_point_pred);
+
 
   // Whether odometry has been initialized.
   bool odom_initialized_;
@@ -95,6 +104,9 @@ class Navigation {
 
   // Previous curvature commands
   std::array<double, COMMAND_MEMORY_LENGTH> previous_curv_;
+
+  // Vehicle object
+  Car vehicle_;
 };
 
 }  // namespace navigation
