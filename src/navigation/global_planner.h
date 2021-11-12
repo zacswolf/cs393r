@@ -48,7 +48,7 @@ class Global_Planner {
     // Global coordinates for the navigation goal
     Eigen::Vector2f global_nav_goal_;
 
-    // Distance to look ahead on global path for selecting the local goal
+    // Distance tom look ahead on global path for selecting the local goal
     float local_nav_dist_;
 
     // Global path - sequence of points

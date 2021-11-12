@@ -5,8 +5,11 @@
 #include "visualization/visualization.h"
 #include "gflags/gflags.h"
 #include "path.h"
+#include "shared/math/math_util.h"
+
 
 using Eigen::Vector2f;
+using namespace math_util;
 
 DEFINE_double(min_clearance, .02, "The min clearance, this accounts for lidar noise");
 DEFINE_int32(rate_path, 0, "The rate path algo to use");
@@ -59,21 +62,29 @@ float Path::rate_path(const Vector2f& goal_point, float previous_curv) {
   float clearance_penalty;
   if (clearance_to_side <= FLAGS_min_clearance) {
     // Dont use this path as lidar noise could cause a collision with the safety margin
-    clearance_penalty = 100;
+    clearance_penalty = 10000;
   } else {
     clearance_penalty = (FLAGS_clearance_mult2 / pow(clearance_to_side, 2)) + (FLAGS_clearance_mult1 / clearance_to_side);
   }
 
-  int previous_side = (0 < previous_curv) - (previous_curv < 0);
-  int side_penalty = previous_side ^= this->side;
+  // Angle and dist to goal point
+  float angle_to_goal = atan2(goal_point[1], goal_point[0]);
+  float dist_to_goal = goal_point.norm();
+  float curvature_rating = point_to_path_dist(goal_point);
+  float angle_rating = -this->curvature * angle_to_goal / dist_to_goal;
+
+  std::cout << "curvature_rating: " << curvature_rating << "; angle_rating: " << angle_rating << std::endl;
+
+  float goal_point_loss = 0.;//curvature_rating + 10*angle_rating;
+
+  // If point is behind us, focus on not colliding
+  if (abs(angle_to_goal) > 3.*M_PI/4.){
+    goal_point_loss = 0.;
+  }
 
   float neg_free_path_length_norm = (-1./8) * this->free_path_length;
-
-  if (FLAGS_rate_path == 0) {
-    return FLAGS_fpl_mult*(neg_free_path_length_norm) + FLAGS_curvature_mult*(1./800)*abs(this->curvature) + clearance_penalty + FLAGS_side_mult*(1./160)*side_penalty;
-  } else {
-    return (-1./8)*this->free_path_length + (1./800)*abs(this->curvature) + (100./8)*clearance_penalty + (1./160)*side_penalty;
-  }
+// FLAGS_curvature_mult*(1./800)*abs(this->curvature)
+  return FLAGS_fpl_mult*(neg_free_path_length_norm) + goal_point_loss + clearance_penalty;
 }
 
 void Path::visualize(amrl_msgs::VisualizationMsg& local_viz_msg_) {

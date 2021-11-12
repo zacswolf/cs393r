@@ -108,6 +108,8 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
+  nav_goal_loc_ = loc;
+  nav_goal_angle_ = angle;
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
@@ -150,8 +152,12 @@ void Navigation::Run() {
   if (!odom_initialized_) return;
 
   // Draw goal point p1, relative to car
-  const Vector2f goal_point = Vector2f(FLAGS_p1_local_coords - (odom_start_loc_ - odom_loc_).norm(), 0.);
-  // const Vector2f goal_point2 = Vector2f(FLAGS_p1_local_coords, 0.) + odom_start_loc_ - odom_loc_;
+  // const Vector2f goal_point = Vector2f(FLAGS_p1_local_coords - (odom_start_loc_ - odom_loc_).norm(), 0.);
+  
+  Eigen::Rotation2Df r_goal(-robot_angle_);
+  // In robot frame
+  const Vector2f goal_point = r_goal * (nav_goal_loc_ - robot_loc_);
+  
   visualization::DrawCross(goal_point, .5, 0x39B81D, local_viz_msg_);
 
   vehicle_.drawBoundingBox(local_viz_msg_);
@@ -235,8 +241,8 @@ void Navigation::Run() {
   global_viz_msg_.header.stamp = ros::Time::now();
   drive_msg_.header.stamp = ros::Time::now();
   // Publish messages.
-  //viz_pub_.publish(local_viz_msg_);
-  //viz_pub_.publish(global_viz_msg_);
+  viz_pub_.publish(local_viz_msg_);
+  viz_pub_.publish(global_viz_msg_);
   drive_pub_.publish(drive_msg_);
 }
 
