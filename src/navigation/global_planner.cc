@@ -99,15 +99,6 @@ void Global_Planner::RasterizeMap() {
             }
             
          }
-         // grid_(grid_xy[0], grid_xy[1]).is_wall = true;
-         // grid_(grid_xy[0]-1, grid_xy[1]).is_wall = true;
-         // grid_(grid_xy[0]+1, grid_xy[1]).is_wall = true;
-         // grid_(grid_xy[0], grid_xy[1]-1).is_wall = true;
-         // grid_(grid_xy[0]-1, grid_xy[1]-1).is_wall = true;
-         // grid_(grid_xy[0]+1, grid_xy[1]-1).is_wall = true;
-         // grid_(grid_xy[0], grid_xy[1]+1).is_wall = true;
-         // grid_(grid_xy[0]-1, grid_xy[1]+1).is_wall = true;
-         // grid_(grid_xy[0]+1, grid_xy[1]+1).is_wall = true;
       }
    }   
 }
@@ -119,7 +110,35 @@ void Global_Planner::SetGlobalNavGoal(Eigen::Vector2f loc) {
 
 // Returns the local coordinates of the intermediate goal along the global path
 Eigen::Vector2f Global_Planner::GetLocalNavGoal(Vector2f veh_loc, float veh_angle) {
-   return Eigen::Vector2f(0,0);
+   Eigen::Vector2f local_goal;
+
+   if (global_path_.size() == 0) {
+      return Vector2f(0.,0.);
+   }
+
+   uint min_dist_ind=0;
+   float min_dist_to_veh = std::numeric_limits<float>::max();
+   vector<float> dist_to_veh;
+
+   for (size_t ii = 0; ii < global_path_.size(); ii++) {
+      Eigen::Vector2f global_pt = global_path_[ii];
+      dist_to_veh.push_back((global_pt - veh_loc).norm());
+      if (dist_to_veh[ii] < min_dist_to_veh) {
+         min_dist_to_veh = dist_to_veh[ii];
+         min_dist_ind = ii;
+      }
+   }
+
+   int new_int = std::min((int)min_dist_ind + 8, (int)(global_path_.size()-1));
+   local_goal = global_path_[new_int];
+
+   Eigen::Rotation2Df r(-veh_angle);
+   local_goal = r * (local_goal - veh_loc);
+
+   local_nav_goal_ = local_goal;
+   
+   return local_goal;
+   
 }
 
 // Computes the global path from the vehicle's pose to the global nav goal
@@ -198,7 +217,21 @@ void Global_Planner::UpdatePathIndex(Vector2f veh_loc, float veh_angle) {
 
 // Checks whether the global path is still valid, recomputing the path if not
 void Global_Planner::CheckPathValid(Vector2f veh_loc, float veh_angle) {
+   
+   float min_dist_to_veh = std::numeric_limits<float>::max();
+   vector<float> dist_to_veh;
 
+   for (uint ii = 0; ii < global_path_.size(); ii++) {
+      Eigen::Vector2f global_pt = global_path_[ii];
+      dist_to_veh.push_back((global_pt - veh_loc).norm());
+      if (dist_to_veh[ii] < min_dist_to_veh) {
+         min_dist_to_veh = dist_to_veh[ii];
+      }
+   }
+
+   if (min_dist_to_veh > 2.) {
+      ComputeGlobalPath(veh_loc, veh_angle);
+   }
 }
 
 // Plots the global path plan to the provided visualization message
@@ -223,7 +256,7 @@ void Global_Planner::PlotGlobalPathVis(amrl_msgs::VisualizationMsg& vis_msg) {
 
 // Plots the local path plan to the provided visualization message
 void Global_Planner::PlotLocalPathVis(amrl_msgs::VisualizationMsg& vis_msg) {
-
+   visualization::DrawCross(local_nav_goal_, .5, 0x39B81D, vis_msg);
 }
 
 Eigen::Vector2i Global_Planner::pointToGrid(Eigen::Vector2f pt) {

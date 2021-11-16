@@ -111,7 +111,7 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   nav_goal_angle_ = angle;
 
   global_planner_.SetGlobalNavGoal(loc);
-  global_planner_.ComputeGlobalPath(robot_loc_, robot_angle_);
+  global_planner_.ComputeGlobalPath(robot_loc_, robot_angle_); 
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
@@ -150,39 +150,48 @@ void Navigation::Run() {
   visualization::ClearVisualizationMsg(local_viz_msg_);
   visualization::ClearVisualizationMsg(global_viz_msg_);
 
-  /////////////////////////
-  // Test global planner //
-  /////////////////////////
+  // /////////////////////////
+  // // Test global planner //
+  // /////////////////////////
 
-  global_planner_.PlotGlobalPathVis(global_viz_msg_);
+  // global_planner_.PlotGlobalPathVis(global_viz_msg_);
 
-  // Add timestamps to all messages.
-  local_viz_msg_.header.stamp = ros::Time::now();
-  global_viz_msg_.header.stamp = ros::Time::now();
-  drive_msg_.header.stamp = ros::Time::now();
-  // Publish messages.
-  viz_pub_.publish(local_viz_msg_);
-  viz_pub_.publish(global_viz_msg_);
-  drive_pub_.publish(drive_msg_);
+  // const Vector2f goal_point = global_planner_.GetLocalNavGoal(robot_loc_, robot_angle_);
+  // global_planner_.PlotLocalPathVis(local_viz_msg_);
 
-  return;
-  /////////////////////////////
-  // End global planner test //
-  /////////////////////////////
+  // // // Add timestamps to all messages.
+  // // local_viz_msg_.header.stamp = ros::Time::now();
+  // // global_viz_msg_.header.stamp = ros::Time::now();
+  // // drive_msg_.header.stamp = ros::Time::now();
+  // // // Publish messages.
+  // // viz_pub_.publish(local_viz_msg_);
+  // // viz_pub_.publish(global_viz_msg_);
+  // // drive_pub_.publish(drive_msg_);
+
+  // return;
+  
+  // /////////////////////////////
+  // // End global planner test //
+  // /////////////////////////////
 
   // If odometry has not been initialized, we can't do anything.
   if (!odom_initialized_) return;
 
+  vehicle_.drawBoundingBox(local_viz_msg_);
+
   // Draw goal point p1, relative to car
   // const Vector2f goal_point = Vector2f(FLAGS_p1_local_coords - (odom_start_loc_ - odom_loc_).norm(), 0.);
   
-  Eigen::Rotation2Df r_goal(-robot_angle_);
-  // In robot frame
-  const Vector2f goal_point = r_goal * (nav_goal_loc_ - robot_loc_);
-  
-  visualization::DrawCross(goal_point, .5, 0x39B81D, local_viz_msg_);
+  // Eigen::Rotation2Df r_goal(-robot_angle_);
+  // // In robot frame
+  // const Vector2f goal_point = r_goal * (nav_goal_loc_ - robot_loc_);
+  // visualization::DrawCross(goal_point, .5, 0x39B81D, local_viz_msg_);
 
-  vehicle_.drawBoundingBox(local_viz_msg_);
+  global_planner_.CheckPathValid(robot_loc_, robot_angle_);
+  const Vector2f goal_point = global_planner_.GetLocalNavGoal(robot_loc_, robot_angle_);
+  global_planner_.PlotGlobalPathVis(global_viz_msg_);
+  global_planner_.PlotLocalPathVis(local_viz_msg_);
+
 
   // The control iteration goes here. 
   // Feel free to make helper functions to structure the control appropriately.

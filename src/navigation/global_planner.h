@@ -80,6 +80,9 @@ class Global_Planner {
     // Global coordinates for the navigation goal
     Eigen::Vector2f global_nav_goal_;
 
+    // Local coordinates for the temporary goal
+    Eigen::Vector2f local_nav_goal_;
+
     // Distance tom look ahead on global path for selecting the local goal
     float local_nav_dist_;
 
@@ -91,9 +94,6 @@ class Global_Planner {
 
    //  // A* Priority Queue
    // SimpleQueue<Eigen::Vector2i, float> pri_queue;
-   
-   // Global path data
-   std::vector<Eigen::Vector2i> global_path;
    
 };
 

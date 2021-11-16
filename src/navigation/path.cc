@@ -71,19 +71,18 @@ float Path::rate_path(const Vector2f& goal_point, float previous_curv) {
   float angle_to_goal = atan2(goal_point[1], goal_point[0]);
   float dist_to_goal = goal_point.norm();
   float curvature_rating = point_to_path_dist(goal_point);
-  float angle_rating = -this->curvature * angle_to_goal / dist_to_goal;
+  float angle_rating = -this->curvature * angle_to_goal / (dist_to_goal+.0001);
 
   std::cout << "curvature_rating: " << curvature_rating << "; angle_rating: " << angle_rating << std::endl;
 
-  float goal_point_loss = 0.;//curvature_rating + 10*angle_rating;
+  float goal_point_loss = curvature_rating + 10*angle_rating;
 
   // If point is behind us, focus on not colliding
   if (abs(angle_to_goal) > 3.*M_PI/4.){
     goal_point_loss = 0.;
   }
 
-  float neg_free_path_length_norm = (-1./8) * this->free_path_length;
-// FLAGS_curvature_mult*(1./800)*abs(this->curvature)
+  float neg_free_path_length_norm = -1 * this->free_path_length;
   return FLAGS_fpl_mult*(neg_free_path_length_norm) + goal_point_loss + clearance_penalty;
 }
 
