@@ -1,20 +1,26 @@
 
 #include <vector>
+#include <optional>
+
 
 #include "eigen3/Eigen/Dense"
+#include "simple_queue.h"
+#include "visualization/visualization.h"
+#include "vector_map/vector_map.h"
+
 
 using Eigen::Vector2f;
+using vector_map::VectorMap;
 
 #ifndef GLOBAL_PLANNER_H
 #define GLOBAL_PLANNER_H
 
-namespace global_planner {
-
 class Global_Planner {
  public:
+    enum Type { A_star=0 };
 
     // Constuctor
-    explicit Global_Planner(const std::string& map_file, int type);
+    explicit Global_Planner(const std::string& map_file);
 
     // Sets the global navigation goal at the provided global coordinates
     void SetGlobalNavGoal(Eigen::Vector2f loc);
@@ -39,6 +45,32 @@ class Global_Planner {
 
  private:
 
+   // Turn map into a raster
+   void RasterizeMap();
+
+   struct GridPt {
+      bool is_wall = false;
+      Eigen::Vector2i parent = Eigen::Vector2i(-1, -1); //TODO FIX
+      float cost = std::numeric_limits<float>::max();
+   };
+   
+
+   // Map grid
+   Eigen::Matrix<GridPt, -1, -1> grid_;
+   float x_min;
+   float y_min;
+   float x_max;
+   float y_max;
+
+   // Converts a map point to a grid point
+   Eigen::Vector2i pointToGrid(Eigen::Vector2f pt);
+
+   // Converts a map point to a grid point
+   Eigen::Vector2f gridToPoint(Eigen::Vector2i grid_pt);
+
+   // Return all neighbors to a grid point
+   std::vector<Eigen::Vector2i> GetNeighbors(Eigen::Vector2i);
+
     // Map of the environment.
     vector_map::VectorMap map_;
 
@@ -52,13 +84,17 @@ class Global_Planner {
     float local_nav_dist_;
 
     // Global path - sequence of points
-    vector<Eigen::Vector2f> global_path_;
+    std::vector<Eigen::Vector2f> global_path_;
 
     // Index of nearest global path point to the vehicle - let's us restrict our search to only nearby path points
     int path_index_;
 
-}
-
-}  // namespace global_planner
+   //  // A* Priority Queue
+   // SimpleQueue<Eigen::Vector2i, float> pri_queue;
+   
+   // Global path data
+   std::vector<Eigen::Vector2i> global_path;
+   
+};
 
 #endif  // GLOBAL_PLANNER_H

@@ -59,12 +59,12 @@ class SimpleQueue {
   void Sort() {
     static const auto comparator = 
         [](const pair<Value, Priority>& v1, const pair<Value, Priority>& v2) {
-      return (v1.second < v2.second);
+      return (v1.second > v2.second);
     };
     sort(values_.begin(), values_.end(), comparator);
   }
 
-  // Retreive the value with the highest priority.
+  // Retreive the value with the smallest priority.
   Value Pop() {
     if (values_.empty()) {
       fprintf(stderr, "ERROR: Pop() called on an empty queue!\n");
