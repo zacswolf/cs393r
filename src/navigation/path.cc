@@ -11,7 +11,7 @@
 using Eigen::Vector2f;
 using namespace math_util;
 
-DEFINE_double(min_clearance, .02, "The min clearance, this accounts for lidar noise");
+DEFINE_double(min_clearance, .1, "The min clearance, this accounts for lidar noise");
 DEFINE_int32(rate_path, 0, "The rate path algo to use");
 
 DEFINE_double(fpl_mult, 1.2, "The free path length multiplier");
@@ -57,6 +57,7 @@ void Path::add_collision_data(float free_path_length, Vector2f closest_point, fl
 }
 
 float Path::rate_path(const Vector2f& goal_point, float previous_curv) {
+  
   //float clearance_to_side = std::min(0., this->clearance - FLAGS_width/2 - FLAGS_del_width);
   float clearance_to_side = this->clearance;
   float clearance_penalty;
@@ -84,6 +85,43 @@ float Path::rate_path(const Vector2f& goal_point, float previous_curv) {
 
   float neg_free_path_length_norm = -1 * this->free_path_length;
   return FLAGS_fpl_mult*(neg_free_path_length_norm) + goal_point_loss + clearance_penalty;
+}
+
+float Path::rate_path_andrew(const Vector2f& goal_point, float previous_curv) {
+
+  float fpl_cost = 0;
+  float clearance_cost = 0;
+  float goal_cost = 0;
+  float angle_to_goal = atan2(goal_point[1], goal_point[0]);
+
+  if (this->clearance < FLAGS_min_clearance) {
+    clearance_cost = 100 + 1./this->clearance;
+  }
+
+  if (this->free_path_length < 2.) {
+    fpl_cost = 200 + 1./this->free_path_length;
+  }
+
+  if (goal_point.norm() < this->free_path_length) {
+    fpl_cost = 0;
+  }
+
+  // if (this->free_path_length > 4.) {
+  //   // don't care
+  //   fpl_cost = 0;
+  //   clearance_cost = 0;
+  // } else if (this->free_path_length > 2) {
+  //   // start worry about clearance
+  //   fpl_cost = 0;
+  // } else {
+  //   // avoid
+  //   fpl_cost = ;
+  // }
+
+  goal_cost = pow(this->curvature - 2*angle_to_goal, 2); // range: -3.14 to 3.14
+
+  return fpl_cost + clearance_cost + goal_cost;
+
 }
 
 void Path::visualize(amrl_msgs::VisualizationMsg& local_viz_msg_) {

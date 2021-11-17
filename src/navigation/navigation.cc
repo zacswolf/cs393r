@@ -63,7 +63,7 @@ DEFINE_double(length, .32385, "The wheel base of the robot");
 DEFINE_double(width, .2286, "The track width of the robot");
 DEFINE_double(del_length, .088075, "The length margin of the robot");
 DEFINE_double(del_width, .0254, "The width margin of the robot");
-DEFINE_double(safety_margin, .05, "The safety margin for the robot");
+DEFINE_double(safety_margin, .0, "The safety margin for the robot");
 
 
 namespace {
@@ -186,11 +186,13 @@ void Navigation::Run() {
   // // In robot frame
   // const Vector2f goal_point = r_goal * (nav_goal_loc_ - robot_loc_);
   // visualization::DrawCross(goal_point, .5, 0x39B81D, local_viz_msg_);
-
-  global_planner_.CheckPathValid(robot_loc_, robot_angle_);
-  const Vector2f goal_point = global_planner_.GetLocalNavGoal(robot_loc_, robot_angle_);
-  global_planner_.PlotGlobalPathVis(global_viz_msg_);
-  global_planner_.PlotLocalPathVis(local_viz_msg_);
+  Vector2f goal_point = Vector2f(0,0);
+  if (global_planner_.IsReady()) {
+    global_planner_.CheckPathValid(robot_loc_, robot_angle_);
+    goal_point = global_planner_.GetLocalNavGoal(robot_loc_, robot_angle_);
+    global_planner_.PlotGlobalPathVis(global_viz_msg_);
+    global_planner_.PlotLocalPathVis(local_viz_msg_);
+  }
 
 
   // The control iteration goes here. 
@@ -242,10 +244,10 @@ void Navigation::Run() {
 
   // Select the "best" path
   Path best_path = path_options[0];
-  float min_loss = best_path.rate_path(goal_point_pred, previous_curv_[0]);
+  float min_loss = best_path.rate_path_andrew(goal_point_pred, previous_curv_[0]);
   
   for (auto& path : path_options) {
-    float loss = path.rate_path(goal_point_pred, previous_curv_[0]);
+    float loss = path.rate_path_andrew(goal_point_pred, previous_curv_[0]);
     
     if (loss < min_loss) {
       min_loss = loss;
