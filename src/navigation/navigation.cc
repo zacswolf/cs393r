@@ -245,10 +245,10 @@ void Navigation::Run() {
 
   // Select the "best" path
   Path best_path = path_options[0];
-  float min_loss = best_path.rate_path_andrew(goal_point_pred, previous_curv_[0]);
+  float min_loss = best_path.rate_path_alt(goal_point_pred, previous_curv_[0]);
   
   for (auto& path : path_options) {
-    float loss = path.rate_path_andrew(goal_point_pred, previous_curv_[0]);
+    float loss = path.rate_path_alt(goal_point_pred, previous_curv_[0]);
     
     if (loss < min_loss) {
       min_loss = loss;

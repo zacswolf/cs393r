@@ -87,7 +87,7 @@ float Path::rate_path(const Vector2f& goal_point, float previous_curv) {
   return FLAGS_fpl_mult*(neg_free_path_length_norm) + goal_point_loss + clearance_penalty;
 }
 
-float Path::rate_path_andrew(const Vector2f& goal_point, float previous_curv) {
+float Path::rate_path_alt(const Vector2f& goal_point, float previous_curv) {
 
   float fpl_cost = 0;
   float clearance_cost = 0;

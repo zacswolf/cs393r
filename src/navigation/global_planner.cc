@@ -25,17 +25,6 @@ Global_Planner::Global_Planner(const std::string& map_file) {
    RasterizeMap();
    std::cout << "Map rasterized\n"; 
 
-   Type type = Type::A_star;
-   // Initialize 
-   switch(type) {
-      case A_star: 
-         // A star init right here
-         
-         break;
-      default:
-         std::cout << "Global_Planner Type error\n"; 
-   }
-
    global_path_ = std::vector<Eigen::Vector2f>();
 
 }
@@ -66,12 +55,8 @@ void Global_Planner::RasterizeMap() {
    const int num_x = (x_max - x_min) / FLAGS_raster_pixel_size;
    const int num_y = (y_max - y_min) / FLAGS_raster_pixel_size;
    std::cout << "Grid Size: " << num_x << " x " << num_y << "\n\n";
-   //false, Eigen::Vector2i(-1, -1), std::numeric_limits<float>::max()
-   //grid_ = Eigen::Matrix<GridPt,-1,-1>::Constant(num_x, num_y, GridPt{});
-   new_grid_ = std::vector<Eigen::Matrix<GridPtNew,-1,-1>>(FLAGS_num_angles);
-   fill(new_grid_.begin(), new_grid_.end(), Eigen::Matrix<GridPtNew,-1,-1>::Constant(num_x, num_y, GridPtNew{}));
-
-   //std::cout << "Is wall? (should be 0 or false) : " << grid_(0,0).is_wall << "\n\n";
+   new_grid_ = std::vector<Eigen::Matrix<GridPt,-1,-1>>(FLAGS_num_angles);
+   fill(new_grid_.begin(), new_grid_.end(), Eigen::Matrix<GridPt,-1,-1>::Constant(num_x, num_y, GridPt{}));
    
    // Iterate over all lines in the map, mark obstacles with a 1
    for (size_t j = 0; j < map_.lines.size(); j++) {
@@ -81,10 +66,8 @@ void Global_Planner::RasterizeMap() {
       
       for (float walk = 0; walk < map_line.Length(); walk += FLAGS_raster_pixel_size/2.) {
          Vector2f walk_pt = (line_unit_normal * walk) + start_pt;
-         
-         // std::cout << "APPLE\n";
+
          Eigen::Vector2i grid_xy = pointToGrid(walk_pt);
-         // std::cout << "ORANGE: " << grid_xy[0] << ", " << grid_xy[1] << "\t"<< walk_pt[0] << ", " << walk_pt[1] << std::endl;
 
          Eigen::Vector2i offsets[] = {
             Eigen::Vector2i(-1, -1),
@@ -144,26 +127,11 @@ Eigen::Vector2f Global_Planner::GetLocalNavGoal(Vector2f veh_loc, float veh_angl
    }
 
    UpdatePathIndex(veh_loc, veh_angle);
-   //std::cout << path_index_ << "\n";
 
    local_goal = global_path_[std::min(path_index_ + 4, (int)global_path_.size()-1)];
-   // Eigen::Vector2f local_goal_1 = global_path_[std::min(path_index_ + 1, (int)global_path_.size()-1)];
-   // Eigen::Vector2f local_goal_2 = global_path_[std::min(path_index_ + 5, (int)global_path_.size()-1)];
-
-   // float dist1 = (local_goal_1 - veh_loc).norm();
-   // float dist2 = (local_goal_2 - veh_loc).norm();
-
-   // //std::cout << dist1 << "   " << dist2 << "\n";
-
-   // if (abs(dist1 - 1.5) < abs(dist2 - 1.5)) {
-   //    local_goal = local_goal_1;
-   // } else {
-   //    local_goal = local_goal_2;
-   // }
 
    Eigen::Rotation2Df r(-veh_angle);
    local_goal = r * (local_goal - veh_loc);
-
    local_nav_goal_ = local_goal;
    
    return local_goal;
@@ -206,12 +174,10 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
          std::cout << rel_to_goal.norm() << "\n\n";
          break;
       } else {
-         vector<Eigen::Vector3i> neighbors = GetNeighborsNew(current);
+         vector<Eigen::Vector3i> neighbors = GetNeighbors(current);
          for (Eigen::Vector3i& neighbor : neighbors) {
-            //Vector2f rel_nei = (neighbor.segment(0,2) - current.segment(0,2));
+            
             float edge_cost = (neighbor.segment(0,2) - current.segment(0,2)).cast<float>().norm();
-
-            //std::cout << "Neighbor coordinates: " << neighbor.transpose() << "   Edge Cost: " << edge_cost <<"\n";
 
             float new_cost = new_grid_[current[2]](current[0], current[1]).cost + edge_cost;
             if (new_cost < new_grid_[neighbor[2]](neighbor[0], neighbor[1]).cost) {
@@ -316,7 +282,7 @@ Eigen::Vector2f Global_Planner::gridToPoint(Eigen::Vector2i grid_pt) {
    return cast_grid_pt * FLAGS_raster_pixel_size + Eigen::Vector2f(x_min, y_min);
 }
 
-std::vector<Eigen::Vector3i> Global_Planner::GetNeighborsNew(Eigen::Vector3i current) {
+std::vector<Eigen::Vector3i> Global_Planner::GetNeighbors(Eigen::Vector3i current) {
    vector<Eigen::Vector3i> neighbors = vector<Eigen::Vector3i>();
    
    int current_ang = current[2];

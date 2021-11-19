@@ -17,7 +17,6 @@ using vector_map::VectorMap;
 
 class Global_Planner {
  public:
-    enum Type { A_star=0 };
 
     // Constuctor
     explicit Global_Planner(const std::string& map_file);
@@ -53,19 +52,13 @@ class Global_Planner {
 
    struct GridPt {
       bool is_wall = false;
-      Eigen::Vector2i parent = Eigen::Vector2i(-1, -1); //TODO FIX
-      float cost = std::numeric_limits<float>::max();
-   };
-
-   struct GridPtNew {
-      bool is_wall = false;
       Eigen::Vector3i parent = Eigen::Vector3i(-1, -1, -1); //TODO FIX
       float cost = std::numeric_limits<float>::max();
    };
    
 
    // Map grid
-   std::vector<Eigen::Matrix<GridPtNew, -1, -1>> new_grid_;
+   std::vector<Eigen::Matrix<GridPt, -1, -1>> new_grid_;
    float x_min;
    float y_min;
    float x_max;
@@ -78,7 +71,7 @@ class Global_Planner {
    Eigen::Vector2f gridToPoint(Eigen::Vector2i grid_pt);
 
    // Return all neighbors to a grid point
-   std::vector<Eigen::Vector3i> GetNeighborsNew(Eigen::Vector3i current);
+   std::vector<Eigen::Vector3i> GetNeighbors(Eigen::Vector3i current);
 
     // Map of the environment.
     vector_map::VectorMap map_;
