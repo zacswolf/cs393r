@@ -87,12 +87,12 @@ void Global_Planner::RasterizeMap() {
          // std::cout << "ORANGE: " << grid_xy[0] << ", " << grid_xy[1] << "\t"<< walk_pt[0] << ", " << walk_pt[1] << std::endl;
 
          Eigen::Vector2i offsets[] = {
-            //Eigen::Vector2i(-1, -1),
+            Eigen::Vector2i(-1, -1),
             Eigen::Vector2i(-1, 0),
-            //Eigen::Vector2i(-1, 1),
-            //Eigen::Vector2i(1, -1),
+            Eigen::Vector2i(-1, 1),
+            Eigen::Vector2i(1, -1),
             Eigen::Vector2i(1, 0),
-            //Eigen::Vector2i(1, 1),
+            Eigen::Vector2i(1, 1),
             Eigen::Vector2i(0, -1),
             Eigen::Vector2i(0, 0),
             Eigen::Vector2i(0, 1),
@@ -118,7 +118,6 @@ void Global_Planner::RasterizeMap() {
          for (Eigen::Vector2i offset : offsets){
             Eigen::Vector2i offset_pt = offset + grid_xy;
             if (offset_pt[0] >= 0 && offset_pt[0] < num_x && offset_pt[1] >= 0 && offset_pt[1] < num_y) {
-               //grid_(offset_pt[0], offset_pt[1]).is_wall = true;
                
                for (int angle_ind = 0; angle_ind < FLAGS_num_angles; angle_ind++) {
                   new_grid_[angle_ind](offset_pt[0], offset_pt[1]).is_wall = true;
@@ -174,75 +173,6 @@ Eigen::Vector2f Global_Planner::GetLocalNavGoal(Vector2f veh_loc, float veh_angl
 // Computes the global path from the vehicle's pose to the global nav goal
 void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
    
-   // Eigen::Vector2i goal = pointToGrid(global_nav_goal_);
-
-   // SimpleQueue<Eigen::Vector2i, float> pri_queue;
-
-   // const Eigen::Vector2i start = pointToGrid(veh_loc);
-   
-   // pri_queue.Push(start, 0); // Push initial location
-   
-   // // std::unordered_map<Eigen::Vector2i, Eigen::Vector2i> parent;
-   // // std::unordered_map<Eigen::Vector2i, float> cost;
-
-   // // cost[loc] = 0;
-   // // parent[loc] = nullptr;
-   // for (int i = 0; i < grid_.rows(); i++) {
-   //    for (int j = 0; j < grid_.cols(); j++) {
-   //       grid_(i, j).cost = std::numeric_limits<float>::max();
-
-   //       for (int angle_ind = 0; angle_ind < FLAGS_num_angles; angle_ind++) {
-   //          new_grid_[angle_ind](i, j).cost = std::numeric_limits<float>::max();
-   //       }
-   //    }
-   // }
-
-   // grid_(start[0], start[1]).cost = 0;
-
-   // // Begin A*
-   // Eigen::Vector2i current;
-   // while (!pri_queue.Empty()) {
-   //    current = pri_queue.Pop();
-   //    if (current == goal) {
-   //       break;
-   //    } else {
-   //       vector<Eigen::Vector2i> neighbors = GetNeighbors(current);
-   //       for (Eigen::Vector2i& neighbor : neighbors) {
-   //          // Eigen::Vector2f step_dist =  .cast <int> ();
-   //          float edge_cost = (neighbor - current).cast<float>().norm();
-   //          float new_cost = grid_(current[0], current[1]).cost + edge_cost;
-   //          if (new_cost < grid_(neighbor[0], neighbor[1]).cost) {
-   //             grid_(neighbor[0], neighbor[1]).cost = new_cost;
-   //             //Eigen::Vector2i dist_to_goal = goal - neighbor;
-   //             float heuristic = (neighbor - goal).cast<float>().norm(); // Euclidean distance
-   //             //float heuristic = abs(dist_to_goal[0]) + abs(dist_to_goal[1]); // Manhattan distance
-   //             pri_queue.Push(neighbor, new_cost + heuristic);
-   //             grid_(neighbor[0], neighbor[1]).parent = current;
-   //          }  
-   //       }
-   //    }
-   // }
-
-   // if (current != goal) {
-   //    std::cout << "[ERROR] A* could not find a path to the goal!\n\n";
-   //    return;
-   // }
-
-   // // Store solution (convert unordered map to vector)
-   // global_path_.clear();
-   // global_path_.push_back(gridToPoint(goal));
-
-   // Eigen::Vector2i pt = goal;
-   // while (grid_(pt[0], pt[1]).parent != start) {
-   //    global_path_.push_back(gridToPoint(grid_(pt[0], pt[1]).parent));
-   //    pt = grid_(pt[0], pt[1]).parent;
-   // }
-
-   // std::reverse(global_path_.begin(), global_path_.end());
-
-
-   // With angles...
-   
    int rounded_angle_ind = ((int) round(math_util::AngleMod(veh_angle) * FLAGS_num_angles / (2 * M_PI)) );
    rounded_angle_ind = (rounded_angle_ind % 8 + 8) % 8;
    std::cout << "Angle Ind: " << rounded_angle_ind << "\n";
@@ -286,7 +216,7 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
             float new_cost = new_grid_[current[2]](current[0], current[1]).cost + edge_cost;
             if (new_cost < new_grid_[neighbor[2]](neighbor[0], neighbor[1]).cost) {
                new_grid_[neighbor[2]](neighbor[0], neighbor[1]).cost = new_cost;
-               //Eigen::Vector2i dist_to_goal = goal - neighbor;
+               
                float heuristic = (neighbor.segment(0,2) - goal.segment(0,2)).cast<float>().norm(); // Euclidean distance
                //float heuristic = abs(dist_to_goal[0]) + abs(dist_to_goal[1]); // Manhattan distance
                pri_queue.Push(neighbor, new_cost + heuristic);
@@ -295,23 +225,16 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
          }
       }
 
-      //std::cout << "\n\n";
-
    }
-
-   // if (current != goal) {
-   //    std::cout << "[ERROR] A* could not find a path to the goal!\n\n";
-   //    return;
-   // }
 
    // Store solution (convert unordered map to vector)
    global_path_.clear();
    global_path_.push_back(gridToPoint(current.segment(0,2)));
 
    Eigen::Vector3i pt = current;
-   //std::cout << new_grid_[pt[2]](pt[0], pt[1]).parent.transpose() << "\n";
+   
    while (new_grid_[pt[2]](pt[0], pt[1]).parent != start) {
-      //std::cout << new_grid_[pt[2]](pt[0], pt[1]).parent.transpose() << "\n";
+      
       Vector2f new_point = gridToPoint(new_grid_[pt[2]](pt[0], pt[1]).parent.segment(0,2));
       Vector2f old_point = global_path_[global_path_.size()-1];
       if ((new_point - old_point).norm() > 0.15) {
@@ -349,21 +272,6 @@ void Global_Planner::UpdatePathIndex(Vector2f veh_loc, float veh_angle) {
 
 // Checks whether the global path is still valid, recomputing the path if not
 void Global_Planner::CheckPathValid(Vector2f veh_loc, float veh_angle) {
-   
-   // float min_dist_to_veh = std::numeric_limits<float>::max();
-   // vector<float> dist_to_veh;
-
-   // for (uint ii = 0; ii < global_path_.size(); ii++) {
-   //    Eigen::Vector2f global_pt = global_path_[ii];
-   //    dist_to_veh.push_back((global_pt - veh_loc).norm());
-   //    if (dist_to_veh[ii] < min_dist_to_veh) {
-   //       min_dist_to_veh = dist_to_veh[ii];
-   //    }
-   // }
-
-   // if (min_dist_to_veh > 2.) {
-   //    ComputeGlobalPath(veh_loc, veh_angle);
-   // }
 
    if ((global_path_[path_index_] - veh_loc).norm() > 2.) {
       ComputeGlobalPath(veh_loc, veh_angle);
@@ -378,6 +286,7 @@ void Global_Planner::PlotGlobalPathVis(amrl_msgs::VisualizationMsg& vis_msg) {
       visualization::DrawCross(pt, 0.05, 0x000000, vis_msg);
    }
 
+   // Visualize map
    // for (int ii = 0; ii < grid_.rows(); ii++) {
    //    for (int jj = 0; jj < grid_.cols(); jj++) {
          
@@ -405,32 +314,6 @@ Eigen::Vector2i Global_Planner::pointToGrid(Eigen::Vector2f pt) {
 Eigen::Vector2f Global_Planner::gridToPoint(Eigen::Vector2i grid_pt) {
    Eigen::Vector2f cast_grid_pt = grid_pt.cast <float> ();
    return cast_grid_pt * FLAGS_raster_pixel_size + Eigen::Vector2f(x_min, y_min);
-}
-
-vector<Eigen::Vector2i> Global_Planner::GetNeighbors(Eigen::Vector2i current) {
-   vector<Eigen::Vector2i> neighbors = vector<Eigen::Vector2i>();
-   
-   Eigen::Vector2i pot_neighbors[] = {
-      Eigen::Vector2i(-1, -1),
-      Eigen::Vector2i(-1, 0),
-      Eigen::Vector2i(-1, 1),
-      Eigen::Vector2i(1, -1),
-      Eigen::Vector2i(1, 0),
-      Eigen::Vector2i(1, 1),
-      Eigen::Vector2i(0, -1),
-      Eigen::Vector2i(0, 1)
-   };
-   
-   // std::cout << "current loc is wall " << grid_(current[0], current[1]).is_wall << std::endl;
-   for (Eigen::Vector2i neighbor : pot_neighbors){
-      Eigen::Vector2i nei = neighbor + current;
-      if (!grid_(nei[0], nei[1]).is_wall) {
-         neighbors.push_back(nei);
-      }
-      
-   }
-
-   return neighbors;
 }
 
 std::vector<Eigen::Vector3i> Global_Planner::GetNeighborsNew(Eigen::Vector3i current) {

@@ -65,7 +65,6 @@ class Global_Planner {
    
 
    // Map grid
-   Eigen::Matrix<GridPt, -1, -1> grid_;
    std::vector<Eigen::Matrix<GridPtNew, -1, -1>> new_grid_;
    float x_min;
    float y_min;
@@ -77,9 +76,6 @@ class Global_Planner {
 
    // Converts a map point to a grid point
    Eigen::Vector2f gridToPoint(Eigen::Vector2i grid_pt);
-
-   // Return all neighbors to a grid point
-   std::vector<Eigen::Vector2i> GetNeighbors(Eigen::Vector2i);
 
    // Return all neighbors to a grid point
    std::vector<Eigen::Vector3i> GetNeighborsNew(Eigen::Vector3i current);
