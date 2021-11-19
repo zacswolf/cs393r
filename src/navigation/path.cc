@@ -95,11 +95,11 @@ float Path::rate_path_andrew(const Vector2f& goal_point, float previous_curv) {
   float angle_to_goal = atan2(goal_point[1], goal_point[0]);
 
   if (this->clearance < FLAGS_min_clearance) {
-    clearance_cost = 100 + 1./this->clearance;
+    clearance_cost = 1000 + 2./this->clearance;
   }
 
   if (this->free_path_length < 2.) {
-    fpl_cost = 200 + 1./this->free_path_length;
+    fpl_cost = 2000 + 1./this->free_path_length;
   }
 
   if (goal_point.norm() < this->free_path_length) {

@@ -161,7 +161,7 @@ void Car::calcPathMetrics(Path& path, const std::vector<Vector2f>& point_cloud) 
       // new_free_path_length = free_path_lengh - *something*
       
       // TODO: Make Clearance work with a 0 curvature
-      float min_arc_angle = DegToRad(5);
+      float min_arc_angle = abs(path.curvature*0.1);//DegToRad(2);
       if (arc_angle_to_point < abs(path.curvature*free_path_length) && arc_angle_to_point > min_arc_angle) {
         clearance_fpl = arc_angle_to_point * path.radius;
 

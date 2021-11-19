@@ -190,6 +190,7 @@ void Navigation::Run() {
   if (global_planner_.IsReady()) {
     global_planner_.CheckPathValid(robot_loc_, robot_angle_);
     goal_point = global_planner_.GetLocalNavGoal(robot_loc_, robot_angle_);
+    //goal_point = Vector2f(2,0);
     global_planner_.PlotGlobalPathVis(global_viz_msg_);
     global_planner_.PlotLocalPathVis(local_viz_msg_);
   }
@@ -237,10 +238,10 @@ void Navigation::Run() {
     vehicle_.calcPathMetrics(path, point_cloud_pred);
   }
 
-  // Visualize paths
-  for (Path& path : path_options) {
-    path.visualize(local_viz_msg_);
-  }
+  // // Visualize paths
+  // for (Path& path : path_options) {
+  //   path.visualize(local_viz_msg_);
+  // }
 
   // Select the "best" path
   Path best_path = path_options[0];
@@ -254,6 +255,8 @@ void Navigation::Run() {
       best_path = path;
     }
   }
+
+  best_path.visualize(local_viz_msg_);
 
   drive_msg_.curvature = best_path.curvature;
 
