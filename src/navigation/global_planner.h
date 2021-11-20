@@ -18,6 +18,9 @@ using vector_map::VectorMap;
 class Global_Planner {
  public:
 
+   const int NUM_PIXELS_GOAL = 3;
+   const int NUM_ANGLES = 8;
+
     // Constuctor
     explicit Global_Planner(const std::string& map_file);
 
@@ -58,7 +61,7 @@ class Global_Planner {
    
 
    // Map grid
-   std::vector<Eigen::Matrix<GridPt, -1, -1>> new_grid_;
+   std::vector<Eigen::Matrix<GridPt, -1, -1>> grid_;
    float x_min;
    float y_min;
    float x_max;

@@ -55,8 +55,8 @@ void Global_Planner::RasterizeMap() {
    const int num_x = (x_max - x_min) / FLAGS_raster_pixel_size;
    const int num_y = (y_max - y_min) / FLAGS_raster_pixel_size;
    std::cout << "Grid Size: " << num_x << " x " << num_y << "\n\n";
-   new_grid_ = std::vector<Eigen::Matrix<GridPt,-1,-1>>(FLAGS_num_angles);
-   fill(new_grid_.begin(), new_grid_.end(), Eigen::Matrix<GridPt,-1,-1>::Constant(num_x, num_y, GridPt{}));
+   grid_ = std::vector<Eigen::Matrix<GridPt,-1,-1>>(FLAGS_num_angles);
+   fill(grid_.begin(), grid_.end(), Eigen::Matrix<GridPt,-1,-1>::Constant(num_x, num_y, GridPt{}));
    
    // Iterate over all lines in the map, mark obstacles with a 1
    for (size_t j = 0; j < map_.lines.size(); j++) {
@@ -103,7 +103,7 @@ void Global_Planner::RasterizeMap() {
             if (offset_pt[0] >= 0 && offset_pt[0] < num_x && offset_pt[1] >= 0 && offset_pt[1] < num_y) {
                
                for (int angle_ind = 0; angle_ind < FLAGS_num_angles; angle_ind++) {
-                  new_grid_[angle_ind](offset_pt[0], offset_pt[1]).is_wall = true;
+                  grid_[angle_ind](offset_pt[0], offset_pt[1]).is_wall = true;
                }
             }
             
@@ -142,7 +142,7 @@ Eigen::Vector2f Global_Planner::GetLocalNavGoal(Vector2f veh_loc, float veh_angl
 void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
    
    int rounded_angle_ind = ((int) round(math_util::AngleMod(veh_angle) * FLAGS_num_angles / (2 * M_PI)) );
-   rounded_angle_ind = (rounded_angle_ind % 8 + 8) % 8;
+   rounded_angle_ind = (rounded_angle_ind % NUM_ANGLES + NUM_ANGLES) % NUM_ANGLES;
    std::cout << "Angle Ind: " << rounded_angle_ind << "\n";
 
    Eigen::Vector2i goal_2d = pointToGrid(global_nav_goal_);
@@ -155,22 +155,22 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
    
    pri_queue.Push(start, 0); // Push initial location
    
-   for (int i = 0; i < new_grid_[0].rows(); i++) {
-      for (int j = 0; j < new_grid_[0].cols(); j++) {
+   for (int i = 0; i < grid_[0].rows(); i++) {
+      for (int j = 0; j < grid_[0].cols(); j++) {
          for (int angle_ind = 0; angle_ind < FLAGS_num_angles; angle_ind++) {
-            new_grid_[angle_ind](i, j).cost = std::numeric_limits<float>::max();
+            grid_[angle_ind](i, j).cost = std::numeric_limits<float>::max();
          }
       }
    }
 
-   new_grid_[start[2]](start[0], start[1]).cost = 0;
+   grid_[start[2]](start[0], start[1]).cost = 0;
 
    // Begin A*
    Eigen::Vector3i current;
    while (!pri_queue.Empty()) {
       current = pri_queue.Pop();
       Vector2f rel_to_goal = current.cast<float>().segment(0,2) - goal.cast<float>().segment(0,2);
-      if (rel_to_goal.norm() < 3) {
+      if (rel_to_goal.norm() < NUM_PIXELS_GOAL) {
          std::cout << rel_to_goal.norm() << "\n\n";
          break;
       } else {
@@ -179,14 +179,14 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
             
             float edge_cost = (neighbor.segment(0,2) - current.segment(0,2)).cast<float>().norm();
 
-            float new_cost = new_grid_[current[2]](current[0], current[1]).cost + edge_cost;
-            if (new_cost < new_grid_[neighbor[2]](neighbor[0], neighbor[1]).cost) {
-               new_grid_[neighbor[2]](neighbor[0], neighbor[1]).cost = new_cost;
+            float new_cost = grid_[current[2]](current[0], current[1]).cost + edge_cost;
+            if (new_cost < grid_[neighbor[2]](neighbor[0], neighbor[1]).cost) {
+               grid_[neighbor[2]](neighbor[0], neighbor[1]).cost = new_cost;
                
                float heuristic = (neighbor.segment(0,2) - goal.segment(0,2)).cast<float>().norm(); // Euclidean distance
                //float heuristic = abs(dist_to_goal[0]) + abs(dist_to_goal[1]); // Manhattan distance
                pri_queue.Push(neighbor, new_cost + heuristic);
-               new_grid_[neighbor[2]](neighbor[0], neighbor[1]).parent = current;
+               grid_[neighbor[2]](neighbor[0], neighbor[1]).parent = current;
             }  
          }
       }
@@ -199,9 +199,9 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
 
    Eigen::Vector3i pt = current;
    
-   while (new_grid_[pt[2]](pt[0], pt[1]).parent != start) {
+   while (grid_[pt[2]](pt[0], pt[1]).parent != start) {
       
-      Vector2f new_point = gridToPoint(new_grid_[pt[2]](pt[0], pt[1]).parent.segment(0,2));
+      Vector2f new_point = gridToPoint(grid_[pt[2]](pt[0], pt[1]).parent.segment(0,2));
       Vector2f old_point = global_path_[global_path_.size()-1];
       if ((new_point - old_point).norm() > 0.15) {
          // Far point, interpolate
@@ -214,7 +214,7 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
          // Close point, no interpolation
          global_path_.push_back(new_point);
       }
-      pt = new_grid_[pt[2]](pt[0], pt[1]).parent;
+      pt = grid_[pt[2]](pt[0], pt[1]).parent;
    }
 
    std::reverse(global_path_.begin(), global_path_.end());
@@ -251,18 +251,6 @@ void Global_Planner::PlotGlobalPathVis(amrl_msgs::VisualizationMsg& vis_msg) {
    for (Eigen::Vector2f pt : global_path_) {
       visualization::DrawCross(pt, 0.05, 0x000000, vis_msg);
    }
-
-   // Visualize map
-   // for (int ii = 0; ii < grid_.rows(); ii++) {
-   //    for (int jj = 0; jj < grid_.cols(); jj++) {
-         
-   //       if (grid_(ii,jj).is_wall) {
-   //          Eigen::Vector2f pt = gridToPoint(Eigen::Vector2i(ii,jj));
-   //          visualization::DrawCross(pt, 0.02, 0x512565, vis_msg);
-   //       }
-
-   //    }
-   // }
 
 }
 
@@ -337,57 +325,6 @@ std::vector<Eigen::Vector3i> Global_Planner::GetNeighbors(Eigen::Vector3i curren
          Eigen::Vector3i(5, -10, 6)
       }
    };
-   
-   // Eigen::Vector3i pot_neighbors[8][3] = {
-   //    {
-   //       // 0
-   //       Eigen::Vector3i(1, 0, 0),
-   //       Eigen::Vector3i(5, 2, 1),
-   //       Eigen::Vector3i(5, -2, 7)
-   //    },
-   //    {
-   //       // 1
-   //       Eigen::Vector3i(1, 1, 1),
-   //       Eigen::Vector3i(2, 5, 2),
-   //       Eigen::Vector3i(5, 2, 0)
-   //    },
-   //    {
-   //       // 2
-   //       Eigen::Vector3i(0, 1, 2),
-   //       Eigen::Vector3i(-2, 5, 3),
-   //       Eigen::Vector3i(2, 5, 1)
-   //    },
-   //    {
-   //       // 3
-   //       Eigen::Vector3i(-1, 1, 3),
-   //       Eigen::Vector3i(-5, 2, 4),
-   //       Eigen::Vector3i(-2, 5, 2)
-   //    },
-   //    {
-   //       // 4
-   //       Eigen::Vector3i(-1, 0, 4),
-   //       Eigen::Vector3i(-5, -2, 5),
-   //       Eigen::Vector3i(-5, 2, 3)
-   //    },
-   //    {
-   //       // 5
-   //       Eigen::Vector3i(-1, -1, 5),
-   //       Eigen::Vector3i(-2, -5, 6),
-   //       Eigen::Vector3i(-5, -2, 4)
-   //    },
-   //    {
-   //       // 6
-   //       Eigen::Vector3i(0, -1, 6),
-   //       Eigen::Vector3i(2, -5, 7),
-   //       Eigen::Vector3i(-2, -5, 5)
-   //    },
-   //    {
-   //       // 7
-   //       Eigen::Vector3i(1, -1, 7),
-   //       Eigen::Vector3i(5, -2, 0),
-   //       Eigen::Vector3i(2, -5, 6)
-   //    }
-   // };
 
    // std::cout << "current loc is wall " << grid_(current[0], current[1]).is_wall << std::endl;
 
@@ -409,7 +346,7 @@ std::vector<Eigen::Vector3i> Global_Planner::GetNeighbors(Eigen::Vector3i curren
          int incr = (neighbor[0] >= 0) - (neighbor[0] < 0);
          for (int x = 0; abs(x) < abs(neighbor[0]); x += incr) {
             int y = (int) round(slope * (float)x);
-            if (new_grid_[nei[2]](cur[0] + x, cur[1] + y).is_wall) { 
+            if (grid_[nei[2]](cur[0] + x, cur[1] + y).is_wall) { 
                is_valid_neighbor = false;
             }
          }
@@ -417,7 +354,7 @@ std::vector<Eigen::Vector3i> Global_Planner::GetNeighbors(Eigen::Vector3i curren
          int incr = (neighbor[1] >= 0) - (neighbor[1] < 0);
          for (int y = 0; abs(y) < abs(neighbor[1]); y += incr) {
             int x = (int) round((float)y / slope);
-            if (new_grid_[nei[2]](cur[0] + x, cur[1] + y).is_wall) { 
+            if (grid_[nei[2]](cur[0] + x, cur[1] + y).is_wall) { 
                is_valid_neighbor = false;
             }
          }
