@@ -3,11 +3,13 @@
 #include "eigen3/Eigen/Dense"
 #include "car.h"
 #include "gflags/gflags.h"
+#include "shared/math/math_util.h"
 
 using Eigen::Vector2f;
+using math_util::DegToRad;
 
 
-DEFINE_double(clearance_drop_off, .1, "The clearance drop off, use 0 for normal clearance");
+DEFINE_double(clearance_drop_off, 0.0, "The clearance drop off, use 0 for normal clearance");
 
 
 // DEFINE_double(max_acceleration, 4., "The max acceleration");
@@ -82,8 +84,8 @@ double Car::dist_to_collision_outer(double radius_car, int side, double radius_p
 // big boi, returns max if no collison 
 
 double Car::distance_to_collision(Path& path, Vector2f pt) {
-  const double MAX_DIST = 8;
-  const double MAX_ANG = 1.5 * M_PI;
+  const double MAX_DIST = 4;
+  const double MAX_ANG = 2 * M_PI;
   double curvature = path.curvature;
   double radius_car = path.radius;
 
@@ -159,7 +161,8 @@ void Car::calcPathMetrics(Path& path, const std::vector<Vector2f>& point_cloud) 
       // new_free_path_length = free_path_lengh - *something*
       
       // TODO: Make Clearance work with a 0 curvature
-      if (arc_angle_to_point < abs(path.curvature*free_path_length)) {
+      float min_arc_angle = abs(path.curvature*0.1);//DegToRad(2);
+      if (arc_angle_to_point < abs(path.curvature*free_path_length) && arc_angle_to_point > min_arc_angle) {
         clearance_fpl = arc_angle_to_point * path.radius;
 
         double radius_pt = (point - Vector2f(0., path.side*path.radius)).norm();

@@ -17,7 +17,9 @@ using vector_map::VectorMap;
 
 class Global_Planner {
  public:
-    enum Type { A_star=0 };
+
+   const int NUM_PIXELS_GOAL = 3;
+   const int NUM_ANGLES = 8;
 
     // Constuctor
     explicit Global_Planner(const std::string& map_file);
@@ -43,6 +45,9 @@ class Global_Planner {
     // Plots the local path plan to the provided visualization message
     void PlotLocalPathVis(amrl_msgs::VisualizationMsg& vis_msg);
 
+    // Check if initialized
+    bool IsReady();
+
  private:
 
    // Turn map into a raster
@@ -50,13 +55,13 @@ class Global_Planner {
 
    struct GridPt {
       bool is_wall = false;
-      Eigen::Vector2i parent = Eigen::Vector2i(-1, -1); //TODO FIX
+      Eigen::Vector3i parent = Eigen::Vector3i(-1, -1, -1); //TODO FIX
       float cost = std::numeric_limits<float>::max();
    };
    
 
    // Map grid
-   Eigen::Matrix<GridPt, -1, -1> grid_;
+   std::vector<Eigen::Matrix<GridPt, -1, -1>> grid_;
    float x_min;
    float y_min;
    float x_max;
@@ -69,7 +74,7 @@ class Global_Planner {
    Eigen::Vector2f gridToPoint(Eigen::Vector2i grid_pt);
 
    // Return all neighbors to a grid point
-   std::vector<Eigen::Vector2i> GetNeighbors(Eigen::Vector2i);
+   std::vector<Eigen::Vector3i> GetNeighbors(Eigen::Vector3i current);
 
     // Map of the environment.
     vector_map::VectorMap map_;
@@ -91,6 +96,9 @@ class Global_Planner {
 
     // Index of nearest global path point to the vehicle - let's us restrict our search to only nearby path points
     int path_index_;
+    
+    // is ready
+    bool is_ready_;
 
    //  // A* Priority Queue
    // SimpleQueue<Eigen::Vector2i, float> pri_queue;
