@@ -40,6 +40,7 @@ class Path {
 
   float rate_path_alt(const Vector2f& goal_point, float previous_curv);
 
+
   void visualize(amrl_msgs::VisualizationMsg& local_viz_msg_);
 };
 

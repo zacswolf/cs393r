@@ -12,6 +12,7 @@ using Eigen::Vector2f;
 using namespace math_util;
 
 DEFINE_double(min_clearance, .1, "The min clearance, this accounts for lidar noise");
+
 DEFINE_int32(rate_path, 0, "The rate path algo to use");
 
 DEFINE_double(fpl_mult, 1.2, "The free path length multiplier");
@@ -57,7 +58,6 @@ void Path::add_collision_data(float free_path_length, Vector2f closest_point, fl
 }
 
 float Path::rate_path(const Vector2f& goal_point, float previous_curv) {
-  
   //float clearance_to_side = std::min(0., this->clearance - FLAGS_width/2 - FLAGS_del_width);
   float clearance_to_side = this->clearance;
   float clearance_penalty;
@@ -77,6 +77,7 @@ float Path::rate_path(const Vector2f& goal_point, float previous_curv) {
   std::cout << "curvature_rating: " << curvature_rating << "; angle_rating: " << angle_rating << std::endl;
 
   float goal_point_loss = curvature_rating + 10*angle_rating;
+
 
   // If point is behind us, focus on not colliding
   if (abs(angle_to_goal) > 3.*M_PI/4.){
@@ -123,6 +124,7 @@ float Path::rate_path_alt(const Vector2f& goal_point, float previous_curv) {
   return fpl_cost + clearance_cost + goal_cost;
 
 }
+
 
 void Path::visualize(amrl_msgs::VisualizationMsg& local_viz_msg_) {
   int side;

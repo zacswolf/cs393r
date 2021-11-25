@@ -26,6 +26,7 @@
 #include "path.h"
 #include "global_planner.h"
 
+
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
 
@@ -111,6 +112,7 @@ class Navigation {
 
   // Global planner
   Global_Planner global_planner_;
+
 };
 
 }  // namespace navigation

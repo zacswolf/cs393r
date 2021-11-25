@@ -1,8 +1,5 @@
 
 #include <vector>
-#include <optional>
-
-
 #include "eigen3/Eigen/Dense"
 #include "simple_queue.h"
 #include "visualization/visualization.h"
@@ -11,6 +8,7 @@
 
 using Eigen::Vector2f;
 using vector_map::VectorMap;
+
 
 #ifndef GLOBAL_PLANNER_H
 #define GLOBAL_PLANNER_H
@@ -75,6 +73,7 @@ class Global_Planner {
 
    // Return all neighbors to a grid point
    std::vector<Eigen::Vector3i> GetNeighbors(Eigen::Vector3i current);
+
 
     // Map of the environment.
     vector_map::VectorMap map_;

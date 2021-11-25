@@ -32,7 +32,6 @@
 #include "shared/ros/ros_helpers.h"
 #include "navigation.h"
 #include "visualization/visualization.h"
-
 #include <limits>
 
 using Eigen::Vector2f;
@@ -90,6 +89,7 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
     nav_goal_angle_(0),
     vehicle_(FLAGS_max_acceleration, FLAGS_max_deceleration, FLAGS_max_speed, FLAGS_length, FLAGS_width, FLAGS_del_length, FLAGS_del_width, FLAGS_safety_margin),
     global_planner_(map_file) {
+
 
   printf("Start Navigation Init\n");
   drive_pub_ = n->advertise<AckermannCurvatureDriveMsg>(
@@ -149,30 +149,6 @@ void Navigation::Run() {
   // Clear previous visualizations.
   visualization::ClearVisualizationMsg(local_viz_msg_);
   visualization::ClearVisualizationMsg(global_viz_msg_);
-
-  // /////////////////////////
-  // // Test global planner //
-  // /////////////////////////
-
-  // global_planner_.PlotGlobalPathVis(global_viz_msg_);
-
-  // const Vector2f goal_point = global_planner_.GetLocalNavGoal(robot_loc_, robot_angle_);
-  // global_planner_.PlotLocalPathVis(local_viz_msg_);
-
-  // // // Add timestamps to all messages.
-  // // local_viz_msg_.header.stamp = ros::Time::now();
-  // // global_viz_msg_.header.stamp = ros::Time::now();
-  // // drive_msg_.header.stamp = ros::Time::now();
-  // // // Publish messages.
-  // // viz_pub_.publish(local_viz_msg_);
-  // // viz_pub_.publish(global_viz_msg_);
-  // // drive_pub_.publish(drive_msg_);
-
-  // return;
-  
-  // /////////////////////////////
-  // // End global planner test //
-  // /////////////////////////////
 
   // If odometry has not been initialized, we can't do anything.
   if (!odom_initialized_) return;
@@ -249,6 +225,7 @@ void Navigation::Run() {
   
   for (auto& path : path_options) {
     float loss = path.rate_path_alt(goal_point_pred, previous_curv_[0]);
+
     
     if (loss < min_loss) {
       min_loss = loss;
