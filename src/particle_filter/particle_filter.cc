@@ -53,7 +53,7 @@ using math_util::RadToDeg;
 using math_util::AngleDiff;
 using math_util::AngleMod;
 
-DEFINE_double(num_particles, 50, "Number of particles");
+DEFINE_double(num_particles, 40, "Number of particles");
 DEFINE_int32(init_mode, 0, "0 to use location data from set pos, 1 to figure it out");
 DEFINE_double(num_particles_init, 2000, "Number of particles");
 
