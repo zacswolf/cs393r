@@ -24,6 +24,8 @@
 #include "eigen3/Eigen/Dense"
 #include "car.h"
 #include "path.h"
+#include "global_planner.h"
+
 
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
@@ -107,6 +109,10 @@ class Navigation {
 
   // Vehicle object
   Car vehicle_;
+
+  // Global planner
+  Global_Planner global_planner_;
+
 };
 
 }  // namespace navigation

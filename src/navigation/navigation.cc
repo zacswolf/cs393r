@@ -32,8 +32,6 @@
 #include "shared/ros/ros_helpers.h"
 #include "navigation.h"
 #include "visualization/visualization.h"
-
-
 #include <limits>
 
 using Eigen::Vector2f;
@@ -64,7 +62,7 @@ DEFINE_double(length, .32385, "The wheel base of the robot");
 DEFINE_double(width, .2286, "The track width of the robot");
 DEFINE_double(del_length, .088075, "The length margin of the robot");
 DEFINE_double(del_width, .0254, "The width margin of the robot");
-DEFINE_double(safety_margin, .05, "The safety margin for the robot");
+DEFINE_double(safety_margin, .0, "The safety margin for the robot");
 
 
 namespace {
@@ -89,7 +87,8 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
     nav_complete_(true),
     nav_goal_loc_(0, 0),
     nav_goal_angle_(0),
-    vehicle_(FLAGS_max_acceleration, FLAGS_max_deceleration, FLAGS_max_speed, FLAGS_length, FLAGS_width, FLAGS_del_length, FLAGS_del_width, FLAGS_safety_margin) {
+    vehicle_(FLAGS_max_acceleration, FLAGS_max_deceleration, FLAGS_max_speed, FLAGS_length, FLAGS_width, FLAGS_del_length, FLAGS_del_width, FLAGS_safety_margin),
+    global_planner_(map_file) {
 
 
   printf("Start Navigation Init\n");
@@ -110,6 +109,9 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   nav_goal_loc_ = loc;
   nav_goal_angle_ = angle;
+
+  global_planner_.SetGlobalNavGoal(loc);
+  global_planner_.ComputeGlobalPath(robot_loc_, robot_angle_); 
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
@@ -151,16 +153,24 @@ void Navigation::Run() {
   // If odometry has not been initialized, we can't do anything.
   if (!odom_initialized_) return;
 
+  vehicle_.drawBoundingBox(local_viz_msg_);
+
   // Draw goal point p1, relative to car
   // const Vector2f goal_point = Vector2f(FLAGS_p1_local_coords - (odom_start_loc_ - odom_loc_).norm(), 0.);
   
-  Eigen::Rotation2Df r_goal(-robot_angle_);
-  // In robot frame
-  const Vector2f goal_point = r_goal * (nav_goal_loc_ - robot_loc_);
-  
-  visualization::DrawCross(goal_point, .5, 0x39B81D, local_viz_msg_);
+  // Eigen::Rotation2Df r_goal(-robot_angle_);
+  // // In robot frame
+  // const Vector2f goal_point = r_goal * (nav_goal_loc_ - robot_loc_);
+  // visualization::DrawCross(goal_point, .5, 0x39B81D, local_viz_msg_);
+  Vector2f goal_point = Vector2f(0,0);
+  if (global_planner_.IsReady()) {
+    global_planner_.CheckPathValid(robot_loc_, robot_angle_);
+    goal_point = global_planner_.GetLocalNavGoal(robot_loc_, robot_angle_);
+    //goal_point = Vector2f(2,0);
+    global_planner_.PlotGlobalPathVis(global_viz_msg_);
+    global_planner_.PlotLocalPathVis(local_viz_msg_);
+  }
 
-  vehicle_.drawBoundingBox(local_viz_msg_);
 
   // The control iteration goes here. 
   // Feel free to make helper functions to structure the control appropriately.
@@ -204,23 +214,26 @@ void Navigation::Run() {
     vehicle_.calcPathMetrics(path, point_cloud_pred);
   }
 
-  // Visualize paths
-  for (Path& path : path_options) {
-    path.visualize(local_viz_msg_);
-  }
+  // // Visualize paths
+  // for (Path& path : path_options) {
+  //   path.visualize(local_viz_msg_);
+  // }
 
   // Select the "best" path
   Path best_path = path_options[0];
-  float min_loss = best_path.rate_path(goal_point_pred, previous_curv_[0]);
+  float min_loss = best_path.rate_path_alt(goal_point_pred, previous_curv_[0]);
   
   for (auto& path : path_options) {
-    float loss = path.rate_path(goal_point_pred, previous_curv_[0]);
+    float loss = path.rate_path_alt(goal_point_pred, previous_curv_[0]);
+
     
     if (loss < min_loss) {
       min_loss = loss;
       best_path = path;
     }
   }
+
+  best_path.visualize(local_viz_msg_);
 
   drive_msg_.curvature = best_path.curvature;
 
