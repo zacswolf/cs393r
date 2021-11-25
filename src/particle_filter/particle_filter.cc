@@ -123,8 +123,6 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
 
   // Populate rays with the lines for each lidar measurement
   for (int i = 0; i < num_ranges; i++) {
-    // TODO: Check math, especially the sign of angle
-    // TODO: Clean up
 
     // Relative to the car
     const Vector2f ray_rotation(cos(ray_angle), sin(ray_angle));
@@ -239,11 +237,8 @@ void ParticleFilter::Update(const vector<float>& ranges,
   if (FLAGS_loc_algo) {
     for (auto& particle : particles_) {
       particle.weight /= weight_sum;
-      std::cout << particle.weight << " ";
     }
   }
-
-  std::cout << "\n\n";
 }
 
 void ParticleFilter::Resample() {
