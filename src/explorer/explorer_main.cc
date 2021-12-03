@@ -13,8 +13,8 @@
 //  If not, see <http://www.gnu.org/licenses/>.
 //========================================================================
 /*!
-\file    navigation_main.cc
-\brief   Main entry point for reference Navigation implementation
+\file    explorer_main.cc
+\brief   Main entry point for reference Explorer implementation
 \author  Joydeep Biswas, (C) 2019
 */
 //========================================================================
@@ -46,12 +46,12 @@
 #include "shared/util/timer.h"
 #include "shared/ros/ros_helpers.h"
 
-#include "navigation.h"
+#include "explorer.h"
 
 using amrl_msgs::Localization2DMsg;
 using math_util::DegToRad;
 using math_util::RadToDeg;
-using navigation::Navigation;
+using explorer::Explorer;
 using ros::Time;
 using ros_helpers::Eigen3DToRosPoint;
 using ros_helpers::Eigen2DToRosPoint;
@@ -72,7 +72,7 @@ DEFINE_string(map, "maps/GDC1.txt", "Name of vector map file");
 
 bool run_ = true;
 sensor_msgs::LaserScan last_laser_msg_;
-Navigation* navigation_ = nullptr;
+Explorer* explorer_ = nullptr;
 
 void LaserCallback(const sensor_msgs::LaserScan& msg) {
   if (FLAGS_v > 0) {
@@ -104,7 +104,7 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
     }
   }
 
-  navigation_->ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
+  explorer_->ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
   last_laser_msg_ = msg;
 }
 
@@ -112,7 +112,7 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
   if (FLAGS_v > 0) {
     printf("Odometry t=%f\n", msg.header.stamp.toSec());
   }
-  navigation_->UpdateOdometry(
+  explorer_->UpdateOdometry(
       Vector2f(msg.pose.pose.position.x, msg.pose.pose.position.y),
       2.0 * atan2(msg.pose.pose.orientation.z, msg.pose.pose.orientation.w),
       Vector2f(msg.twist.twist.linear.x, msg.twist.twist.linear.y),
@@ -124,7 +124,7 @@ void GoToCallback(const geometry_msgs::PoseStamped& msg) {
   const float angle =
       2.0 * atan2(msg.pose.orientation.z, msg.pose.orientation.w);
   printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), angle);
-  navigation_->SetNavGoal(loc, angle);
+  explorer_->SetNavGoal(loc, angle);
 }
 
 void SignalHandler(int) {
@@ -140,7 +140,7 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg msg) {
   if (FLAGS_v > 0) {
     printf("Localization t=%f\n", GetWallTime());
   }
-  navigation_->UpdateLocation(Vector2f(msg.pose.x, msg.pose.y), msg.pose.theta);
+  explorer_->UpdateLocation(Vector2f(msg.pose.x, msg.pose.y), msg.pose.theta);
 }
 
 int main(int argc, char** argv) {
@@ -149,7 +149,7 @@ int main(int argc, char** argv) {
   // Initialize ROS.
   ros::init(argc, argv, "navigation", ros::init_options::NoSigintHandler);
   ros::NodeHandle n;
-  navigation_ = new Navigation(FLAGS_map, &n);
+  explorer_ = new Explorer(FLAGS_map, &n);
 
   ros::Subscriber velocity_sub =
       n.subscribe(FLAGS_odom_topic, 1, &OdometryCallback);
@@ -164,9 +164,9 @@ int main(int argc, char** argv) {
   RateLoop loop(20.0);
   while (run_ && ros::ok()) {
     ros::spinOnce();
-    navigation_->Run();
+    explorer_->Run();
     loop.Sleep();
   }
-  delete navigation_;
+  delete explorer_;
   return 0;
 }

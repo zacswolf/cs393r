@@ -38,6 +38,14 @@ ADD_SUBDIRECTORY(src/shared)
 INCLUDE_DIRECTORIES(src/shared)
 INCLUDE_DIRECTORIES(src)
 
+ROSBUILD_ADD_EXECUTABLE(explorer
+                        src/explorer/explorer_main.cc
+                        src/explorer/explorer.cc
+                        src/explorer/car.cc
+                        src/explorer/path.cc
+                        src/explorer/global_planner.cc)
+TARGET_LINK_LIBRARIES(explorer shared_library ${libs})
+
 ROSBUILD_ADD_EXECUTABLE(slam
                         src/slam/slam_main.cc
                         src/slam/slam.cc)
@@ -55,7 +63,6 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/car.cc
                         src/navigation/path.cc
                         src/navigation/global_planner.cc)
-
 TARGET_LINK_LIBRARIES(navigation shared_library ${libs})
 
 ADD_EXECUTABLE(eigen_tutorial

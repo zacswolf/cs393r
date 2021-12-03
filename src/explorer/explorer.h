@@ -13,8 +13,8 @@
 //  If not, see <http://www.gnu.org/licenses/>.
 //========================================================================
 /*!
-\file    navigation.h
-\brief   Interface for reference Navigation class.
+\file    explorer.h
+\brief   Interface for reference Explorer class.
 \author  Joydeep Biswas, (C) 2019
 */
 //========================================================================
@@ -34,15 +34,15 @@ namespace ros {
   class NodeHandle;
 }  // namespace ros
 
-namespace navigation {
+namespace explorer {
 
 const int COMMAND_MEMORY_LENGTH = 20;
 
-class Navigation {
+class Explorer {
  public:
 
    // Constructor
-  explicit Navigation(const std::string& map_file, ros::NodeHandle* n);
+  explicit Explorer(const std::string& map_file, ros::NodeHandle* n);
 
   // Used in callback from localization to update position.
   void UpdateLocation(const Eigen::Vector2f& loc, float angle);
@@ -94,11 +94,11 @@ class Navigation {
   // Latest observed point cloud.
   std::vector<Eigen::Vector2f> point_cloud_;
 
-  // Whether navigation is complete.
+  // Whether explorer is complete.
   bool nav_complete_;
-  // Navigation goal location.
+  // Explorer goal location.
   Eigen::Vector2f nav_goal_loc_;
-  // Navigation goal angle.
+  // Explorer goal angle.
   float nav_goal_angle_;
 
   // Previous velocity commands
@@ -115,6 +115,6 @@ class Navigation {
 
 };
 
-}  // namespace navigation
+}  // namespace explorer
 
 #endif  // NAVIGATION_H

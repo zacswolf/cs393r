@@ -13,8 +13,8 @@
 //  If not, see <http://www.gnu.org/licenses/>.
 //========================================================================
 /*!
-\file    navigation.cc
-\brief   Starter code for navigation.
+\file    explorer.cc
+\brief   Starter code for explorer.
 \author  Joydeep Biswas, (C) 2019
 */
 //========================================================================
@@ -30,7 +30,7 @@
 #include "shared/math/math_util.h"
 #include "shared/util/timer.h"
 #include "shared/ros/ros_helpers.h"
-#include "navigation.h"
+#include "explorer.h"
 #include "visualization/visualization.h"
 #include <limits>
 
@@ -75,9 +75,9 @@ AckermannCurvatureDriveMsg drive_msg_;
 const float kEpsilon = 1e-5;
 } //namespace
 
-namespace navigation {
+namespace explorer {
 
-Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
+Explorer::Explorer(const string& map_file, ros::NodeHandle* n) :
     odom_initialized_(false),
     localization_initialized_(false),
     robot_loc_(0, 0),
@@ -91,7 +91,7 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
     global_planner_(map_file) {
 
 
-  printf("Start Navigation Init\n");
+  printf("Start Explorer Init\n");
   drive_pub_ = n->advertise<AckermannCurvatureDriveMsg>(
       "ackermann_curvature_drive", 1);
   viz_pub_ = n->advertise<VisualizationMsg>("visualization", 1);
@@ -103,10 +103,10 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
 
   std::fill(std::begin(previous_vel_), std::end(previous_vel_), 0.);
   std::fill(std::begin(previous_curv_), std::end(previous_curv_), 0.);
-  printf("End Navigation Init\n");
+  printf("End Explorer Init\n");
 }
 
-void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
+void Explorer::SetNavGoal(const Vector2f& loc, float angle) {
   nav_goal_loc_ = loc;
   nav_goal_angle_ = angle;
 
@@ -114,13 +114,13 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   global_planner_.ComputeGlobalPath(robot_loc_, robot_angle_); 
 }
 
-void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
+void Explorer::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
   localization_initialized_ = true;
   robot_loc_ = loc;
   robot_angle_ = angle;
 }
 
-void Navigation::UpdateOdometry(const Vector2f& loc,
+void Explorer::UpdateOdometry(const Vector2f& loc,
                                 float angle,
                                 const Vector2f& vel,
                                 float ang_vel) {
@@ -138,12 +138,12 @@ void Navigation::UpdateOdometry(const Vector2f& loc,
   odom_angle_ = angle;
 }
 
-void Navigation::ObservePointCloud(const vector<Vector2f>& cloud,
+void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
                                    double time) {
   point_cloud_ = cloud;                                     
 }
 
-void Navigation::Run() {
+void Explorer::Run() {
   // This function gets called 20 times a second to form the control loop.
   
   // Clear previous visualizations.
@@ -259,7 +259,7 @@ void Navigation::Run() {
   drive_pub_.publish(drive_msg_);
 }
 
-void Navigation::forwardPredict(std::vector<Vector2f> &point_cloud_pred, float &vel_pred, float &rel_angle_pred, Vector2f &rel_loc_pred, std::array<double, COMMAND_MEMORY_LENGTH> previous_vel_, std::array<double, COMMAND_MEMORY_LENGTH> previous_curv_, Vector2f &goal_point_pred) {
+void Explorer::forwardPredict(std::vector<Vector2f> &point_cloud_pred, float &vel_pred, float &rel_angle_pred, Vector2f &rel_loc_pred, std::array<double, COMMAND_MEMORY_LENGTH> previous_vel_, std::array<double, COMMAND_MEMORY_LENGTH> previous_curv_, Vector2f &goal_point_pred) {
 
   int total_latency = FLAGS_actuation_latency + FLAGS_sensing_latency;
 
@@ -304,4 +304,4 @@ void Navigation::forwardPredict(std::vector<Vector2f> &point_cloud_pred, float &
   goal_point_pred = r2 * goal_point_pred;
 }
 
-}  // namespace navigation
+}  // namespace explorer
