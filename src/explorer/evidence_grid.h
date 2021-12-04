@@ -54,24 +54,26 @@ class EvidenceGrid {
 
   void UpdateEvidenceGrid(std::vector<Eigen::Vector2f> new_points, std::vector<Eigen::Vector2f> new_points_open, Eigen::Vector2f robot_loc, float robot_angle) {
     //Eigen::Vector2i grid_robot_loc = pointToGrid(robot_loc);
-    // int x0 = grid_robot_loc[0];
-    // int y0 = grid_robot_loc[1];
+    Eigen::Vector2i grid_robot_loc = pointToGrid(Eigen::Vector2f(0,0));
+    int x0 = grid_robot_loc[0];
+    int y0 = grid_robot_loc[1];
     
-    // for (Vector2f& point : new_points) {
-    //   plotLine(x0, y0, point, false);
-    // }
+    for (Vector2f& point : new_points) {
+      plotLine(x0, y0, point, false);
+    }
 
-    // for (Vector2f& point : new_points_open) {
-    //   plotLine(x0, y0, point, true);
-    // }
-    plotLine(0, 0, Eigen::Vector2f(5, 2), true);
-    plotLine(0, 0, Eigen::Vector2f(5, -2), true);
-    plotLine(0, 0, Eigen::Vector2f(-5, 2), true);
-    plotLine(0, 0, Eigen::Vector2f(-5, -2), true);
-    plotLine(0, 0, Eigen::Vector2f(2, 5), true);
-    plotLine(0, 0, Eigen::Vector2f(2, -5), true);
-    plotLine(0, 0, Eigen::Vector2f(-2, 5), true);
-    plotLine(0, 0, Eigen::Vector2f(-2, -5), true);
+    for (Vector2f& point : new_points_open) {
+      plotLine(x0, y0, point, true);
+    }
+
+    // plotLine(x0, y0, Eigen::Vector2f(5, 2), true);
+    // plotLine(x0, y0, Eigen::Vector2f(5, -2), true);
+    // plotLine(x0, y0, Eigen::Vector2f(-5, 2), true);
+    // plotLine(x0, y0, Eigen::Vector2f(-5, -2), true);
+    // plotLine(x0, y0, Eigen::Vector2f(2, 5), true);
+    // plotLine(x0, y0, Eigen::Vector2f(2, -5), true);
+    // plotLine(x0, y0, Eigen::Vector2f(-2, 5), true);
+    // plotLine(x0, y0, Eigen::Vector2f(-2, -5), true);
   }
 
     // Plots the evidence grid
@@ -79,11 +81,11 @@ class EvidenceGrid {
       for (int x = 0; x < num_x; x++) {
         for (int y = 0; y < num_y; y++) {
           float evidence = evidence_grid_(x,y);
-          if (evidence < 0.5) {
-            // Plot unexplored
-            Eigen::Vector2f pt = gridToPoint(Eigen::Vector2i(x,y));
-            visualization::DrawCross(pt, 0.05, 0x3333BB, vis_msg);
-          }
+          // if (evidence < 0.5) {
+          //   // Plot unexplored
+          //   Eigen::Vector2f pt = gridToPoint(Eigen::Vector2i(x,y));
+          //   visualization::DrawCross(pt, 0.05, 0x3333BB, vis_msg);
+          // }
           if (evidence > 0.5) {
             // Plot obstructed
             Eigen::Vector2f pt = gridToPoint(Eigen::Vector2i(x,y));
@@ -100,6 +102,7 @@ class EvidenceGrid {
   Eigen::Matrix<float, -1, -1> evidence_grid_;
 
   void plotLineLow(int x0, int y0, int x1, int y1, bool isOpen) {
+    //std::cout << "Low\n";
     int dx = x1 - x0;
     int dy = y1 - y0;
     int yi = 1;
@@ -126,6 +129,7 @@ class EvidenceGrid {
   }
 
   void plotLineHigh(int x0, int y0, int x1, int y1, bool isOpen) {
+    //std::cout << "High\n";
     int dx = x1 - x0;
     int dy = y1 - y0;
     int xi = 1;
@@ -157,7 +161,9 @@ class EvidenceGrid {
     int x1 = grid_pt_loc[0];
     int y1 = grid_pt_loc[1];
 
-    if (abs(y1 - y0) < abs(x1 - y1)) {
+    //std::cout << "(" << x0 << "," << y0 << ") to (" << x1 << "," << y1 << ")\n";
+
+    if (abs(y1 - y0) < abs(x1 - x0)) {
       if (x0 > x1) {
         plotLineLow(x1, y1, x0, y0, isOpen);
       } else {

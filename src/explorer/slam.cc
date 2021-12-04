@@ -38,7 +38,7 @@
 // Observe Laser
 DEFINE_double(min_odom_loc_diff, .5, "Minimum Odom translation diff to create a new pose");
 DEFINE_double(min_odom_angle_diff, 20, "Minimum Odom rotation diff to create a new pose");
-DEFINE_int32(map_scan_mod, 4, "The modulo of the number of point used during create map");
+DEFINE_int32(map_scan_mod, 1, "The modulo of the number of point used during create map");
 
 // Raster
 DEFINE_double(raster_map_dist, 12.0, "Maximum distance of x & y axes in the rasterized map");
