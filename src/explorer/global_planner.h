@@ -19,8 +19,15 @@ class Global_Planner {
    const int NUM_PIXELS_GOAL = 3;
    const int NUM_ANGLES = 8;
 
+   float x_min;
+   float y_min;
+   float x_max;
+   float y_max;
+   int num_x;
+   int num_y;
+
     // Constuctor
-    explicit Global_Planner(const std::string& map_file);
+    explicit Global_Planner();
 
     // Sets the global navigation goal at the provided global coordinates
     void SetGlobalNavGoal(Eigen::Vector2f loc);
@@ -43,14 +50,14 @@ class Global_Planner {
     // Plots the local path plan to the provided visualization message
     void PlotLocalPathVis(amrl_msgs::VisualizationMsg& vis_msg);
 
+    void PlotWallVis(amrl_msgs::VisualizationMsg& vis_msg);
+
     // Check if initialized
     bool IsReady();
 
+   void AddWallsFromSLAM(std::vector<Eigen::Vector2f> point_cloud_);
  private:
-
-   // Turn map into a raster
-   void RasterizeMap();
-
+ 
    struct GridPt {
       bool is_wall = false;
       Eigen::Vector3i parent = Eigen::Vector3i(-1, -1, -1); //TODO FIX
@@ -60,20 +67,16 @@ class Global_Planner {
 
    // Map grid
    std::vector<Eigen::Matrix<GridPt, -1, -1>> grid_;
-   float x_min;
-   float y_min;
-   float x_max;
-   float y_max;
 
+ public:
    // Converts a map point to a grid point
    Eigen::Vector2i pointToGrid(Eigen::Vector2f pt);
 
    // Converts a map point to a grid point
    Eigen::Vector2f gridToPoint(Eigen::Vector2i grid_pt);
-
+ private:
    // Return all neighbors to a grid point
    std::vector<Eigen::Vector3i> GetNeighbors(Eigen::Vector3i current);
-
 
     // Map of the environment.
     vector_map::VectorMap map_;

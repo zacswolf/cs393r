@@ -43,7 +43,8 @@ ROSBUILD_ADD_EXECUTABLE(explorer
                         src/explorer/explorer.cc
                         src/explorer/car.cc
                         src/explorer/path.cc
-                        src/explorer/global_planner.cc)
+                        src/explorer/global_planner.cc
+                        src/explorer/slam.cc)
 TARGET_LINK_LIBRARIES(explorer shared_library ${libs})
 
 ROSBUILD_ADD_EXECUTABLE(slam

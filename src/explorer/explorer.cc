@@ -33,6 +33,9 @@
 #include "explorer.h"
 #include "visualization/visualization.h"
 #include <limits>
+#include "slam.h"
+#include "amrl_msgs/Localization2DMsg.h"
+
 
 using Eigen::Vector2f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
@@ -68,9 +71,12 @@ DEFINE_double(safety_margin, .0, "The safety margin for the robot");
 namespace {
 ros::Publisher drive_pub_;
 ros::Publisher viz_pub_;
+ros::Publisher slam_loc_pub_;
 VisualizationMsg local_viz_msg_;
 VisualizationMsg global_viz_msg_;
+VisualizationMsg slam_viz_msg_;
 AckermannCurvatureDriveMsg drive_msg_;
+
 // Epsilon value for handling limited numerical precision.
 const float kEpsilon = 1e-5;
 } //namespace
@@ -88,17 +94,23 @@ Explorer::Explorer(const string& map_file, ros::NodeHandle* n) :
     nav_goal_loc_(0, 0),
     nav_goal_angle_(0),
     vehicle_(FLAGS_max_acceleration, FLAGS_max_deceleration, FLAGS_max_speed, FLAGS_length, FLAGS_width, FLAGS_del_length, FLAGS_del_width, FLAGS_safety_margin),
-    global_planner_(map_file) {
+    global_planner_(),
+    slam_(),
+    evidence_grid_() {
 
 
   printf("Start Explorer Init\n");
   drive_pub_ = n->advertise<AckermannCurvatureDriveMsg>(
       "ackermann_curvature_drive", 1);
   viz_pub_ = n->advertise<VisualizationMsg>("visualization", 1);
+  slam_loc_pub_ = n->advertise<amrl_msgs::Localization2DMsg>("localization", 1);
   local_viz_msg_ = visualization::NewVisualizationMessage(
       "base_link", "navigation_local");
   global_viz_msg_ = visualization::NewVisualizationMessage(
       "map", "navigation_global");
+  slam_viz_msg_ = visualization::NewVisualizationMessage(
+      "map", "slam");
+    
   InitRosHeader("base_link", &drive_msg_.header);
 
   std::fill(std::begin(previous_vel_), std::end(previous_vel_), 0.);
@@ -124,6 +136,10 @@ void Explorer::UpdateOdometry(const Vector2f& loc,
                                 float angle,
                                 const Vector2f& vel,
                                 float ang_vel) {
+
+  // Slam
+  slam_.ObserveOdometry(loc, angle);
+
   robot_omega_ = ang_vel;
   robot_vel_ = vel;
   if (!odom_initialized_) {
@@ -136,11 +152,97 @@ void Explorer::UpdateOdometry(const Vector2f& loc,
   }
   odom_loc_ = loc;
   odom_angle_ = angle;
+
 }
 
+
+///////////
+// SLAM MAP
+///////////
+// void PublishMap() {
+//   static double t_last = 0;
+//   if (GetMonotonicTime() - t_last < 0.5) {
+//     // Rate-limit visualization.
+//     return;
+//   }
+//   t_last = GetMonotonicTime();
+//   // vis_msg_.header.stamp = ros::Time::now();
+//   // ClearVisualizationMsg(vis_msg_);
+
+//   const vector<Vector2f> map = slam_.GetMap();
+//   for (const Vector2f& p : map) {
+//     visualization::DrawPoint(p, 0xC0C0C0, global_viz_msg_);
+//   }
+//   // visualization_publisher_.publish(vis_msg_);
+// }
+
+////////////
+// SLAM POSE
+////////////
+// void PublishPose() {
+//   Vector2f robot_loc(0, 0);
+//   float robot_angle(0);
+//   explorer_->slam_.GetPose(&robot_loc, &robot_angle);
+//   amrl_msgs::Localization2DMsg localization_msg;
+//   localization_msg.pose.x = robot_loc.x();
+//   localization_msg.pose.y = robot_loc.y();
+//   localization_msg.pose.theta = robot_angle;
+//   // LocalizationCallback(localization_msg);
+//   slam_loc_pub_.publish(localization_msg);
+// }
+
+
 void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
-                                   double time) {
-  point_cloud_ = cloud;                                     
+                                 const vector<Vector2f>& cloud_open) {
+  point_cloud_ = cloud;
+  
+  // SLAM
+  vector<Vector2f> new_points;
+  vector<Vector2f> new_open_points;
+  slam_.ObservePointCloud(point_cloud_, cloud_open, new_points, new_open_points);
+
+  // TODO: update evidence grid
+  Vector2f robot_loc(0,0);
+  float robot_angle = 0;
+  slam_.GetPoseNoOdom(&robot_loc, &robot_angle);
+  evidence_grid_.UpdateEvidenceGrid(new_points, new_open_points, robot_loc, robot_angle);
+
+  global_planner_.AddWallsFromSLAM(new_points);
+
+  // Vis slam map
+  static double t_last = 0; // for rate limit
+  if (GetMonotonicTime() - t_last > 0.5) {
+    t_last = GetMonotonicTime();
+    slam_viz_msg_.header.stamp = ros::Time::now();
+    visualization::ClearVisualizationMsg(slam_viz_msg_);
+
+    const vector<Vector2f> map = slam_.GetMap();
+    for (const Vector2f& p : map) {
+      visualization::DrawPoint(p, 0xC0C0C0, slam_viz_msg_);
+    }
+
+    for (const Vector2f& p : new_open_points) {
+      visualization::DrawPoint(p, 0x00FF00, slam_viz_msg_);
+    }
+
+    // Plot global map
+    evidence_grid_.PlotEvidenceVis(slam_viz_msg_);
+    //global_planner_.PlotWallVis(slam_viz_msg_);
+
+    viz_pub_.publish(slam_viz_msg_);
+  }
+
+  
+
+  // Post localization
+  // Vector2f robot_loc(0, 0);
+  // float robot_angle(0);
+  slam_.GetPose(&robot_loc, &robot_angle);
+  amrl_msgs::Localization2DMsg localization_msg;
+  localization_msg.pose.x = robot_loc.x();
+  localization_msg.pose.y = robot_loc.y();
+  localization_msg.pose.theta = robot_angle;
+  slam_loc_pub_.publish(localization_msg);
 }
 
 void Explorer::Run() {
@@ -166,7 +268,6 @@ void Explorer::Run() {
   if (global_planner_.IsReady()) {
     global_planner_.CheckPathValid(robot_loc_, robot_angle_);
     goal_point = global_planner_.GetLocalNavGoal(robot_loc_, robot_angle_);
-    //goal_point = Vector2f(2,0);
     global_planner_.PlotGlobalPathVis(global_viz_msg_);
     global_planner_.PlotLocalPathVis(local_viz_msg_);
   }
@@ -264,9 +365,7 @@ void Explorer::forwardPredict(std::vector<Vector2f> &point_cloud_pred, float &ve
   int total_latency = FLAGS_actuation_latency + FLAGS_sensing_latency;
 
   for(int i = total_latency-1; i >= 0; i--) {
-
     vel_pred = previous_vel_[i];
-
     double arc_distance_pred = vel_pred/FLAGS_update_rate;
 
     if (previous_curv_[i] == 0.) {

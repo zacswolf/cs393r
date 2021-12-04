@@ -74,6 +74,14 @@ bool run_ = true;
 sensor_msgs::LaserScan last_laser_msg_;
 Explorer* explorer_ = nullptr;
 
+// From nav
+void LocalizationCallback(const amrl_msgs::Localization2DMsg msg) {
+  if (FLAGS_v > 0) {
+    printf("Localization t=%f\n", GetWallTime());
+  }
+  explorer_->UpdateLocation(Vector2f(msg.pose.x, msg.pose.y), msg.pose.theta);
+}
+
 void LaserCallback(const sensor_msgs::LaserScan& msg) {
   if (FLAGS_v > 0) {
     printf("Laser t=%f, dt=%f\n",
@@ -91,21 +99,25 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
   static vector<Vector2f> point_cloud_(num_rays);
   point_cloud_.clear();
 
+  static vector<Vector2f> point_cloud_open_(num_rays);
+  point_cloud_open_.clear();
+
   // Convert the LaserScan to a point cloud
-  float range;
-  float angle;
-  Vector2f laser_loc;
   for (int i = 0; i < num_rays; i++) {
-    range = msg.ranges[i];
-    if (range >= msg.range_min && range <= msg.range_max) {
-      angle = msg.angle_min + i * msg.angle_increment;
-      laser_loc = Vector2f(range * cos(angle), range * sin(angle)) + kLaserLoc;
+    float range = msg.ranges[i];
+    float angle = msg.angle_min + i * msg.angle_increment;
+    Vector2f laser_loc = Vector2f(range * cos(angle), range * sin(angle)) + kLaserLoc;
+    if (range > msg.range_min && range < msg.range_max) {
       point_cloud_.push_back(laser_loc);
+    } else {
+      point_cloud_open_.push_back(laser_loc);
     }
   }
 
-  explorer_->ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
-  last_laser_msg_ = msg;
+  explorer_->ObservePointCloud(point_cloud_, point_cloud_open_);
+
+  // PublishMap();
+  // PublishPose();
 }
 
 void OdometryCallback(const nav_msgs::Odometry& msg) {
@@ -136,13 +148,6 @@ void SignalHandler(int) {
   run_ = false;
 }
 
-void LocalizationCallback(const amrl_msgs::Localization2DMsg msg) {
-  if (FLAGS_v > 0) {
-    printf("Localization t=%f\n", GetWallTime());
-  }
-  explorer_->UpdateLocation(Vector2f(msg.pose.x, msg.pose.y), msg.pose.theta);
-}
-
 int main(int argc, char** argv) {
   google::ParseCommandLineFlags(&argc, &argv, false);
   signal(SIGINT, SignalHandler);
@@ -150,6 +155,11 @@ int main(int argc, char** argv) {
   ros::init(argc, argv, "navigation", ros::init_options::NoSigintHandler);
   ros::NodeHandle n;
   explorer_ = new Explorer(FLAGS_map, &n);
+
+  // visualization_publisher_ =
+  //     n.advertise<VisualizationMsg>("visualization", 1);
+  // localization_publisher_ =
+  //     n.advertise<amrl_msgs::Localization2DMsg>("localization", 1);
 
   ros::Subscriber velocity_sub =
       n.subscribe(FLAGS_odom_topic, 1, &OdometryCallback);

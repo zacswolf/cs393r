@@ -25,6 +25,8 @@
 #include "car.h"
 #include "path.h"
 #include "global_planner.h"
+#include "slam.h"
+#include "evidence_grid.h"
 
 
 #ifndef NAVIGATION_H
@@ -55,12 +57,15 @@ class Explorer {
 
   // Updates based on an observed laser scan
   void ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud,
-                         double time);
+                         const std::vector<Eigen::Vector2f>& cloud_open);
 
   // Main function called continously from main
   void Run();
   // Used to set the next target pose.
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
+
+  // Update values in the evidence grid with new SLAM scan
+  void UpdateEvidenceGrid(vector<Vector2f> new_points, vector<Vector2f> new_points_open, Vector2f robot_loc, float robot_angle);
 
  private:
   void forwardPredict(std::vector<Eigen::Vector2f> &point_cloud_pred,
@@ -112,7 +117,13 @@ class Explorer {
 
   // Global planner
   Global_Planner global_planner_;
+ 
+ public:
+  // SLAM
+  slam::SLAM slam_;
 
+  // Evidence grid
+  EvidenceGrid evidence_grid_;
 };
 
 }  // namespace explorer

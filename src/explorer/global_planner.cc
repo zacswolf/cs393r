@@ -10,106 +10,34 @@ using std::vector;
 using geometry::line2f;
 
 
+// HARD CODED IN EVIDENCE GRID TODO: FIX
 DEFINE_double(raster_pixel_size, 0.1, "Distance between pixels in the raster");
+
 DEFINE_int32(num_angles, 8, "Number of angles to use");
 
 // Constuctor
-Global_Planner::Global_Planner(const std::string& map_file) {
+Global_Planner::Global_Planner() {
 
    this->is_ready_ = false;
 
-   // Load map file
-   map_.Load(map_file);
 
    // Turn Map into grid
-   RasterizeMap();
-   std::cout << "Map rasterized\n"; 
+   grid_ = std::vector<Eigen::Matrix<GridPt,-1,-1>>(FLAGS_num_angles);
+   x_min = -10;
+   x_max = 10;
+   
+   y_min = -10;
+   y_max = 10;
+
+   num_x = (x_max - x_min) / FLAGS_raster_pixel_size;
+   num_y = (y_max - y_min) / FLAGS_raster_pixel_size;
+   
+   fill(grid_.begin(), grid_.end(), Eigen::Matrix<GridPt,-1,-1>::Constant(num_x, num_y, GridPt{}));
+
+   std::cout << "Map created\n";
 
    global_path_ = std::vector<Eigen::Vector2f>();
 
-}
-
-void Global_Planner::RasterizeMap() {
-   x_min = 100000;
-   x_max = -100000;
-   
-   y_min = 100000;
-   y_max = -100000;
-
-   for (line2f& map_line : map_.lines) {
-      float xs[] = {map_line.p0[0], map_line.p1[0]};
-      for (float x : xs) {
-         x_min = (x < x_min)? x : x_min;
-         x_max = (x > x_max)? x : x_max;
-      }
-
-      float ys[] = {map_line.p0[1], map_line.p1[1]};
-      
-      for (float y : ys) {
-         y_min = (y < y_min)? y : y_min;
-         y_max = (y > y_max)? y : y_max;
-      }
-   }
-   std::cout << "(" << x_min << ", " << y_min << ") x (" << x_max << ", " << y_max << ")" << std::endl;
-   
-   const int num_x = (x_max - x_min) / FLAGS_raster_pixel_size;
-   const int num_y = (y_max - y_min) / FLAGS_raster_pixel_size;
-   std::cout << "Grid Size: " << num_x << " x " << num_y << "\n\n";
-   grid_ = std::vector<Eigen::Matrix<GridPt,-1,-1>>(FLAGS_num_angles);
-   fill(grid_.begin(), grid_.end(), Eigen::Matrix<GridPt,-1,-1>::Constant(num_x, num_y, GridPt{}));
-   
-   // Iterate over all lines in the map, mark obstacles with a 1
-   for (size_t j = 0; j < map_.lines.size(); j++) {
-      const line2f map_line = map_.lines[j];
-      Vector2f line_unit_normal = map_line.Dir();
-      Vector2f start_pt = map_line.p0;
-      
-      for (float walk = 0; walk < map_line.Length(); walk += FLAGS_raster_pixel_size/2.) {
-         Vector2f walk_pt = (line_unit_normal * walk) + start_pt;
-
-         Eigen::Vector2i grid_xy = pointToGrid(walk_pt);
-
-         Eigen::Vector2i offsets[] = {
-            Eigen::Vector2i(-1, -1),
-            Eigen::Vector2i(-1, 0),
-            Eigen::Vector2i(-1, 1),
-            Eigen::Vector2i(1, -1),
-            Eigen::Vector2i(1, 0),
-            Eigen::Vector2i(1, 1),
-            Eigen::Vector2i(0, -1),
-            Eigen::Vector2i(0, 0),
-            Eigen::Vector2i(0, 1),
-            Eigen::Vector2i(0, -2),
-            Eigen::Vector2i(0, 2),
-            Eigen::Vector2i(-2, 0),
-            Eigen::Vector2i(2, 0),
-            Eigen::Vector2i(-3, 0),
-            Eigen::Vector2i(-2, 1),
-            Eigen::Vector2i(-1, 2),
-            Eigen::Vector2i(0, 3),
-            Eigen::Vector2i(1, 2),
-            Eigen::Vector2i(2, 1),
-            Eigen::Vector2i(3, 0),
-            Eigen::Vector2i(-2, -1),
-            Eigen::Vector2i(-1, -2),
-            Eigen::Vector2i(0, -3),
-            Eigen::Vector2i(1, -2),
-            Eigen::Vector2i(2, -1),
-         };
-         
-         // std::cout << "current loc is wall " << grid_(current[0], current[1]).is_wall << std::endl;
-         for (Eigen::Vector2i offset : offsets){
-            Eigen::Vector2i offset_pt = offset + grid_xy;
-            if (offset_pt[0] >= 0 && offset_pt[0] < num_x && offset_pt[1] >= 0 && offset_pt[1] < num_y) {
-               
-               for (int angle_ind = 0; angle_ind < FLAGS_num_angles; angle_ind++) {
-                  grid_[angle_ind](offset_pt[0], offset_pt[1]).is_wall = true;
-               }
-            }
-            
-         }
-      }
-   }   
 }
 
 // Sets the global navigation goal at the provided global coordinates
@@ -246,6 +174,23 @@ void Global_Planner::CheckPathValid(Vector2f veh_loc, float veh_angle) {
 }
 
 // Plots the global path plan to the provided visualization message
+void Global_Planner::PlotWallVis(amrl_msgs::VisualizationMsg& vis_msg) {
+   //const int num_x = (x_max - x_min) / FLAGS_raster_pixel_size;
+   //const int num_y = (y_max - y_min) / FLAGS_raster_pixel_size;
+   for (int x = 0; x < num_x; x++) {
+      for (int y = 0; y < num_y; y++) {
+         bool is_wall = grid_[0](x, y).is_wall;
+         if (is_wall) {
+            // Plot wall
+            Eigen::Vector2f pt = gridToPoint(Eigen::Vector2i(x,y));
+            visualization::DrawCross(pt, 0.1, 0x000000, vis_msg);
+         }
+      }
+   }
+
+}
+
+// Plots the global path plan to the provided visualization message
 void Global_Planner::PlotGlobalPathVis(amrl_msgs::VisualizationMsg& vis_msg) {
 
    for (Eigen::Vector2f pt : global_path_) {
@@ -370,5 +315,50 @@ std::vector<Eigen::Vector3i> Global_Planner::GetNeighbors(Eigen::Vector3i curren
 
 bool Global_Planner::IsReady() {
    return this->is_ready_;
+}
+
+void Global_Planner::AddWallsFromSLAM(std::vector<Eigen::Vector2f> point_cloud) {
+   const static Eigen::Vector2i offsets[] = {
+      Eigen::Vector2i(-1, -1),
+      Eigen::Vector2i(-1, 0),
+      Eigen::Vector2i(-1, 1),
+      Eigen::Vector2i(1, -1),
+      Eigen::Vector2i(1, 0),
+      Eigen::Vector2i(1, 1),
+      Eigen::Vector2i(0, -1),
+      Eigen::Vector2i(0, 0),
+      Eigen::Vector2i(0, 1),
+      Eigen::Vector2i(0, -2),
+      Eigen::Vector2i(0, 2),
+      Eigen::Vector2i(-2, 0),
+      Eigen::Vector2i(2, 0),
+      Eigen::Vector2i(-3, 0),
+      Eigen::Vector2i(-2, 1),
+      Eigen::Vector2i(-1, 2),
+      Eigen::Vector2i(0, 3),
+      Eigen::Vector2i(1, 2),
+      Eigen::Vector2i(2, 1),
+      Eigen::Vector2i(3, 0),
+      Eigen::Vector2i(-2, -1),
+      Eigen::Vector2i(-1, -2),
+      Eigen::Vector2i(0, -3),
+      Eigen::Vector2i(1, -2),
+      Eigen::Vector2i(2, -1),
+   };
+
+   for (Eigen::Vector2f& point : point_cloud) {
+      Eigen::Vector2i wall_index = pointToGrid(point);
+   
+      for (Eigen::Vector2i offset : offsets){
+         Eigen::Vector2i offset_pt = offset + wall_index;
+         if (offset_pt[0] >= 0 && offset_pt[0] < num_x && offset_pt[1] >= 0 && offset_pt[1] < num_y) {
+            
+            for (int angle_ind = 0; angle_ind < FLAGS_num_angles; angle_ind++) {
+               grid_[angle_ind](offset_pt[0], offset_pt[1]).is_wall = true;
+            }
+         }
+      }
+   }
+   
 }
 
