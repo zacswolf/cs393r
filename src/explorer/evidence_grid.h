@@ -5,6 +5,9 @@
 #include "visualization/visualization.h"
 #include "vector_map/vector_map.h"
 
+#include <unordered_set>
+#include "vector_hash.h"
+
 
 using Eigen::Vector2f;
 using Eigen::Vector2i;
@@ -35,16 +38,17 @@ class EvidenceGrid {
   float y_max;
   float num_x;
   float num_y;
+  Eigen::Matrix<float, -1, -1> evidence_grid_;
   
   explicit EvidenceGrid() {
 
     // Change these values in global_planner.cc too!
     raster_pixel_size = 0.1;
-    x_min = -10;
-    x_max = 10;
+    x_min = -50;
+    x_max = 50;
     
-    y_min = -10;
-    y_max = 10;
+    y_min = -50;
+    y_max = 50;
 
     num_x = (x_max - x_min) / raster_pixel_size;
     num_y = (y_max - y_min) / raster_pixel_size;
@@ -52,28 +56,19 @@ class EvidenceGrid {
     evidence_grid_ = Eigen::Matrix<float,-1,-1>::Constant(num_x, num_y, 0.5);
   }
 
-  void UpdateEvidenceGrid(std::vector<Eigen::Vector2f> new_points, std::vector<Eigen::Vector2f> new_points_open, Eigen::Vector2f robot_loc, float robot_angle) {
+  void UpdateEvidenceGrid(std::vector<Eigen::Vector2f> new_points, std::vector<Eigen::Vector2f> new_points_open, Eigen::Vector2f robot_loc, float robot_angle, std::unordered_set<Vector2i, matrix_hash<Eigen::Vector2i>> &new_walls) {
     //Eigen::Vector2i grid_robot_loc = pointToGrid(robot_loc);
     Eigen::Vector2i grid_robot_loc = pointToGrid(Eigen::Vector2f(0,0));
     int x0 = grid_robot_loc[0];
     int y0 = grid_robot_loc[1];
     
     for (Vector2f& point : new_points) {
-      plotLine(x0, y0, point, false);
+      plotLine(x0, y0, point, false, new_walls);
     }
 
     for (Vector2f& point : new_points_open) {
-      plotLine(x0, y0, point, true);
+      plotLine(x0, y0, point, true, new_walls);
     }
-
-    // plotLine(x0, y0, Eigen::Vector2f(5, 2), true);
-    // plotLine(x0, y0, Eigen::Vector2f(5, -2), true);
-    // plotLine(x0, y0, Eigen::Vector2f(-5, 2), true);
-    // plotLine(x0, y0, Eigen::Vector2f(-5, -2), true);
-    // plotLine(x0, y0, Eigen::Vector2f(2, 5), true);
-    // plotLine(x0, y0, Eigen::Vector2f(2, -5), true);
-    // plotLine(x0, y0, Eigen::Vector2f(-2, 5), true);
-    // plotLine(x0, y0, Eigen::Vector2f(-2, -5), true);
   }
 
     // Plots the evidence grid
@@ -89,7 +84,7 @@ class EvidenceGrid {
           if (evidence > 0.5) {
             // Plot obstructed
             Eigen::Vector2f pt = gridToPoint(Eigen::Vector2i(x,y));
-            visualization::DrawCross(pt, 0.05, 0x000000, vis_msg);
+            visualization::DrawCross(pt, 0.05, 0xa903fc, vis_msg);
           }
         }
       }
@@ -98,8 +93,6 @@ class EvidenceGrid {
 
 
  private:
-
-  Eigen::Matrix<float, -1, -1> evidence_grid_;
 
   void plotLineLow(int x0, int y0, int x1, int y1, bool isOpen) {
     //std::cout << "Low\n";
@@ -155,7 +148,7 @@ class EvidenceGrid {
     }
   }
   
-  void plotLine(int x0, int y0, Vector2f point, bool isOpen) {
+  void plotLine(int x0, int y0, Vector2f point, bool isOpen, std::unordered_set<Vector2i, matrix_hash<Eigen::Vector2i>> &new_walls) {
     Eigen::Vector2i grid_pt_loc = pointToGrid(point);
 
     int x1 = grid_pt_loc[0];
@@ -179,6 +172,7 @@ class EvidenceGrid {
 
     if (!isOpen){
       evidence_grid_(x1,y1) = 1.;
+      new_walls.insert(Eigen::Vector2i(x1,y1));
     } else {
     // Add to evidence grid, TODO: bayesian update
     // if (evidence_grid_(x1,y1) <= 0.5) {

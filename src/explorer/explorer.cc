@@ -36,6 +36,9 @@
 #include "slam.h"
 #include "amrl_msgs/Localization2DMsg.h"
 
+#include <unordered_set>
+#include "vector_hash.h"
+
 
 using Eigen::Vector2f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
@@ -59,7 +62,7 @@ DEFINE_int32(update_rate, 20, "The update rate of the control loop (Hz)");
 // Car
 DEFINE_double(max_acceleration, 4., "The max acceleration");
 DEFINE_double(max_deceleration, 4., "The max deceleration");
-DEFINE_double(max_speed, 1., "The max speed");
+DEFINE_double(max_speed, .5, "The max speed");
 
 DEFINE_double(length, .32385, "The wheel base of the robot");
 DEFINE_double(width, .2286, "The track width of the robot");
@@ -205,13 +208,15 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
   Vector2f robot_loc(0,0);
   float robot_angle = 0;
   slam_.GetPoseNoOdom(&robot_loc, &robot_angle);
-  evidence_grid_.UpdateEvidenceGrid(new_points, new_open_points, robot_loc, robot_angle);
 
-  global_planner_.AddWallsFromSLAM(new_points);
+  std::unordered_set<Vector2i, matrix_hash<Eigen::Vector2i>> new_walls;
+  evidence_grid_.UpdateEvidenceGrid(new_points, new_open_points, robot_loc, robot_angle, new_walls);
+  global_planner_.updateWallGrid(new_walls);
+  //global_planner_.AddWallsFromSLAM(new_points);
 
   // Vis slam map
   static double t_last = 0; // for rate limit
-  if (GetMonotonicTime() - t_last > 0.5) {
+  if (GetMonotonicTime() - t_last > 2) {
     t_last = GetMonotonicTime();
     slam_viz_msg_.header.stamp = ros::Time::now();
     visualization::ClearVisualizationMsg(slam_viz_msg_);
@@ -226,8 +231,8 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
     }
 
     // Plot global map
-    evidence_grid_.PlotEvidenceVis(slam_viz_msg_);
-    //global_planner_.PlotWallVis(slam_viz_msg_);
+    //evidence_grid_.PlotEvidenceVis(slam_viz_msg_);
+    global_planner_.PlotWallVis(slam_viz_msg_);
 
     viz_pub_.publish(slam_viz_msg_);
   }

@@ -179,7 +179,7 @@ void SLAM::ObservePointCloud(const std::vector<Vector2f>& cloud, const std::vect
     float angle_diff = AngleDiff(current_odom_angle_, prev_pose_odom_angle_);
     Eigen::Vector2f loc_diff = current_odom_loc_ - prev_pose_odom_loc_;
 
-      // Add a new pose when odom dist or angle diff is above threshhold
+    // Add a new pose when odom dist or angle diff is above threshhold
     if (loc_diff.norm() > FLAGS_min_odom_loc_diff || RadToDeg(abs(angle_diff)) > FLAGS_min_odom_angle_diff) {
       std::cout << "Loc Diff: " << loc_diff.norm() << "\n";
       std::cout << "Angle Diff: " << RadToDeg(angle_diff) << "\n";

@@ -4,7 +4,8 @@
 #include "simple_queue.h"
 #include "visualization/visualization.h"
 #include "vector_map/vector_map.h"
-
+#include <unordered_set>
+#include "vector_hash.h"
 
 using Eigen::Vector2f;
 using vector_map::VectorMap;
@@ -59,7 +60,6 @@ class Global_Planner {
  private:
  
    struct GridPt {
-      bool is_wall = false;
       Eigen::Vector3i parent = Eigen::Vector3i(-1, -1, -1); //TODO FIX
       float cost = std::numeric_limits<float>::max();
    };
@@ -67,6 +67,7 @@ class Global_Planner {
 
    // Map grid
    std::vector<Eigen::Matrix<GridPt, -1, -1>> grid_;
+   Eigen::Matrix<bool, -1, -1> wall_grid_;
 
  public:
    // Converts a map point to a grid point
@@ -74,6 +75,9 @@ class Global_Planner {
 
    // Converts a map point to a grid point
    Eigen::Vector2f gridToPoint(Eigen::Vector2i grid_pt);
+
+   // Update wall grid
+   void updateWallGrid(std::unordered_set<Eigen::Vector2i, matrix_hash<Eigen::Vector2i>> new_walls);
  private:
    // Return all neighbors to a grid point
    std::vector<Eigen::Vector3i> GetNeighbors(Eigen::Vector3i current);

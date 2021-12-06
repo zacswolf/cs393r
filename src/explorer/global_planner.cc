@@ -23,17 +23,17 @@ Global_Planner::Global_Planner() {
 
    // Turn Map into grid
    grid_ = std::vector<Eigen::Matrix<GridPt,-1,-1>>(FLAGS_num_angles);
-   x_min = -10;
-   x_max = 10;
+   x_min = -50;
+   x_max = 50;
    
-   y_min = -10;
-   y_max = 10;
+   y_min = -50;
+   y_max = 50;
 
    num_x = (x_max - x_min) / FLAGS_raster_pixel_size;
    num_y = (y_max - y_min) / FLAGS_raster_pixel_size;
    
    fill(grid_.begin(), grid_.end(), Eigen::Matrix<GridPt,-1,-1>::Constant(num_x, num_y, GridPt{}));
-
+   wall_grid_ = Eigen::Matrix<bool,-1,-1>::Constant(num_x, num_y, false);
    std::cout << "Map created\n";
 
    global_path_ = std::vector<Eigen::Vector2f>();
@@ -179,7 +179,7 @@ void Global_Planner::PlotWallVis(amrl_msgs::VisualizationMsg& vis_msg) {
    //const int num_y = (y_max - y_min) / FLAGS_raster_pixel_size;
    for (int x = 0; x < num_x; x++) {
       for (int y = 0; y < num_y; y++) {
-         bool is_wall = grid_[0](x, y).is_wall;
+         bool is_wall = wall_grid_(x, y);
          if (is_wall) {
             // Plot wall
             Eigen::Vector2f pt = gridToPoint(Eigen::Vector2i(x,y));
@@ -271,7 +271,7 @@ std::vector<Eigen::Vector3i> Global_Planner::GetNeighbors(Eigen::Vector3i curren
       }
    };
 
-   // std::cout << "current loc is wall " << grid_(current[0], current[1]).is_wall << std::endl;
+   // std::cout << "current loc is wall " << wall_grid_(current[0], current[1]) << std::endl;
 
    for (Eigen::Vector3i neighbor : pot_neighbors[current_ang]){
 
@@ -291,7 +291,7 @@ std::vector<Eigen::Vector3i> Global_Planner::GetNeighbors(Eigen::Vector3i curren
          int incr = (neighbor[0] >= 0) - (neighbor[0] < 0);
          for (int x = 0; abs(x) < abs(neighbor[0]); x += incr) {
             int y = (int) round(slope * (float)x);
-            if (grid_[nei[2]](cur[0] + x, cur[1] + y).is_wall) { 
+            if (wall_grid_(cur[0] + x, cur[1] + y)) { 
                is_valid_neighbor = false;
             }
          }
@@ -299,7 +299,7 @@ std::vector<Eigen::Vector3i> Global_Planner::GetNeighbors(Eigen::Vector3i curren
          int incr = (neighbor[1] >= 0) - (neighbor[1] < 0);
          for (int y = 0; abs(y) < abs(neighbor[1]); y += incr) {
             int x = (int) round((float)y / slope);
-            if (grid_[nei[2]](cur[0] + x, cur[1] + y).is_wall) { 
+            if (wall_grid_(cur[0] + x, cur[1] + y)) { 
                is_valid_neighbor = false;
             }
          }
@@ -352,13 +352,62 @@ void Global_Planner::AddWallsFromSLAM(std::vector<Eigen::Vector2f> point_cloud) 
       for (Eigen::Vector2i offset : offsets){
          Eigen::Vector2i offset_pt = offset + wall_index;
          if (offset_pt[0] >= 0 && offset_pt[0] < num_x && offset_pt[1] >= 0 && offset_pt[1] < num_y) {
-            
-            for (int angle_ind = 0; angle_ind < FLAGS_num_angles; angle_ind++) {
-               grid_[angle_ind](offset_pt[0], offset_pt[1]).is_wall = true;
-            }
+            wall_grid_(offset_pt[0], offset_pt[1]) = true;
          }
       }
    }
    
 }
 
+// void updateWallGrid(Eigen::Matrix<float, -1, -1> &evidence_grid) {
+//    wall_grid_ = (evidence_grid.array() >= 0.5);
+// }
+
+void Global_Planner::updateWallGrid(std::unordered_set<Eigen::Vector2i, matrix_hash<Eigen::Vector2i>> new_walls) {
+   // Note: this will go through unknown space
+   // Proposed solution: maintain a frontier matrix and when checking for is wall look at both frontier mat and wall_grid
+   
+   // Other solution: everything starts as a wall, pass in the "free" grid spaces that you want to make not walls,
+   // then you check the offsets around each point to see if they're a wall (in the evidence grid) or not, if not then make it open
+   
+   const static Eigen::Vector2i offsets[] = {
+      Eigen::Vector2i(-1, -1),
+      Eigen::Vector2i(-1, 0),
+      Eigen::Vector2i(-1, 1),
+      Eigen::Vector2i(1, -1),
+      Eigen::Vector2i(1, 0),
+      Eigen::Vector2i(1, 1),
+      Eigen::Vector2i(0, -1),
+      Eigen::Vector2i(0, 0),
+      Eigen::Vector2i(0, 1),
+      Eigen::Vector2i(0, -2),
+      Eigen::Vector2i(0, 2),
+      Eigen::Vector2i(-2, 0),
+      Eigen::Vector2i(2, 0),
+      Eigen::Vector2i(-3, 0),
+      Eigen::Vector2i(-2, 1),
+      Eigen::Vector2i(-1, 2),
+      Eigen::Vector2i(0, 3),
+      Eigen::Vector2i(1, 2),
+      Eigen::Vector2i(2, 1),
+      Eigen::Vector2i(3, 0),
+      Eigen::Vector2i(-2, -1),
+      Eigen::Vector2i(-1, -2),
+      Eigen::Vector2i(0, -3),
+      Eigen::Vector2i(1, -2),
+      Eigen::Vector2i(2, -1),
+   };
+
+   for (Eigen::Vector2i new_wall : new_walls) {
+      for (Eigen::Vector2i offset : offsets){
+         Eigen::Vector2i offset_pt = offset + new_wall;
+         if (offset_pt[0] >= 0 && offset_pt[0] < num_x && offset_pt[1] >= 0 && offset_pt[1] < num_y) {
+            wall_grid_(offset_pt[0], offset_pt[1]) = true;
+         }
+      }
+   }
+
+
+   // TODO: add functionality to remove walls
+   // Note: non-trivial, will need to add "wall suport" set for each wall and only delete if its empty
+}
