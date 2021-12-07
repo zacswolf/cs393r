@@ -98,15 +98,18 @@ void SLAM::GetPose(Eigen::Vector2f* loc, float* angle) const {
   if (!pose_initialized_) {
     *loc = Eigen::Vector2f(0., 0.);
     *angle = 0;
+    std::cout << "SLAM pose not initialized! Returning (0,0)\n";
   } else {
     auto prev_pose = prev_poses_.back();
 
-    float del_odom_angle = current_odom_angle_ - prev_pose_odom_angle_;
+    // float del_odom_angle = current_odom_angle_ - prev_pose_odom_angle_;
     Eigen::Rotation2Df rotation_odom(-prev_pose_odom_angle_);
-    Eigen::Vector2f del_odom = rotation_odom * (current_odom_loc_ - prev_pose_odom_loc_);
+    // Eigen::Vector2f del_odom = rotation_odom * (current_odom_loc_ - prev_pose_odom_loc_);
 
-    *loc = prev_pose.loc + del_odom;
-    *angle = prev_pose.angle + del_odom_angle;
+    //std::cout << "SLAM Loc: " << prev_pose.loc.transpose() << " -- w/ Odom: -- " << (prev_pose.loc + del_odom).transpose() << "\n";
+
+    *loc = prev_pose.loc;// + del_odom;
+    *angle = prev_pose.angle;// + del_odom_angle;
   }
 }
 
@@ -121,6 +124,10 @@ void SLAM::GetPoseNoOdom(Eigen::Vector2f* loc, float* angle) const {
     *loc = prev_pose.loc;
     *angle = prev_pose.angle;
   }
+}
+
+bool SLAM::isInitialized() {
+  return pose_initialized_ && odom_initialized_ && slam_started_;
 }
 
 std::vector<Eigen::Vector2f> SLAM::ScanToPointCloud(
@@ -149,13 +156,13 @@ std::vector<Eigen::Vector2f> SLAM::ScanToPointCloud(
 
 }
 
-void SLAM::ObservePointCloud(const std::vector<Vector2f>& cloud, const std::vector<Vector2f>& cloud_open, std::vector<Vector2f>& new_points, std::vector<Vector2f>& new_points_open) {
+bool SLAM::ObservePointCloud(const std::vector<Vector2f>& cloud, const std::vector<Vector2f>& cloud_open, std::vector<Vector2f>& new_points, std::vector<Vector2f>& new_points_open) {
   // A new laser scan has been observed. Decide whether to add it as a pose
   // for SLAM. If decided to add, align it to the scan from the last saved pose,
   // and save both the scan and the optimized pose.
   
 
-  if (!pose_initialized_) {
+  if (!pose_initialized_ && odom_initialized_) {
     std::vector<Eigen::Vector2f> point_cloud = cloud;
     std::vector<Eigen::Vector2f> point_cloud_open = cloud_open;
     
@@ -172,9 +179,13 @@ void SLAM::ObservePointCloud(const std::vector<Vector2f>& cloud, const std::vect
         new_points_open.push_back(point_cloud_open[i]);
     }
     
+    // Update previous pose odom
+    prev_pose_odom_angle_ = current_odom_angle_;
+    prev_pose_odom_loc_ = current_odom_loc_;
 
     pose_initialized_ = true;
-    std::cout << "Pose initialized!\n\n";
+    std::cout << "<SLAM> Pose initialized!\n";
+    return true;
   } else if (odom_initialized_) {
     float angle_diff = AngleDiff(current_odom_angle_, prev_pose_odom_angle_);
     Eigen::Vector2f loc_diff = current_odom_loc_ - prev_pose_odom_loc_;
@@ -232,9 +243,11 @@ void SLAM::ObservePointCloud(const std::vector<Vector2f>& cloud, const std::vect
       prev_pose_odom_angle_ = current_odom_angle_;
       prev_pose_odom_loc_ = current_odom_loc_;
 
+      return true;
     }
+    slam_started_ = true;
   }
-
+  return false;
 }
 
 Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cloud, float sd_laser) {
@@ -392,7 +405,7 @@ SLAM::Pose SLAM::CsmSearch(std::vector<Eigen::Vector2f> sampled_point_cloud, Eig
 
 void SLAM::ObserveOdometry(const Vector2f& odom_loc, const float odom_angle) {
   if (!odom_initialized_ && odom_counter_ <= 0) {
-    std::cout << "Initializing odom! \n";
+    std::cout << "<SLAM> Initializing odom!\n";
     prev_pose_odom_angle_ = odom_angle;
     prev_pose_odom_loc_ = odom_loc;
     odom_initialized_ = true;
@@ -404,6 +417,8 @@ void SLAM::ObserveOdometry(const Vector2f& odom_loc, const float odom_angle) {
   // Keep track of odometry to estimate how far the robot has moved between poses.
   current_odom_angle_ = odom_angle;
   current_odom_loc_ = odom_loc;
+
+  //std::cout << "Current Odom: " << current_odom_loc_.transpose() << " -- Prev Odom: " << prev_pose_odom_loc_.transpose() << "\n";
 }
 
 vector<Vector2f> SLAM::GetMap() {

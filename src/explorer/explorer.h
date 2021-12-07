@@ -27,6 +27,7 @@
 #include "global_planner.h"
 #include "slam.h"
 #include "evidence_grid.h"
+#include "frontier.h"
 
 
 #ifndef NAVIGATION_H
@@ -117,6 +118,8 @@ class Explorer {
 
   // Global planner
   Global_Planner global_planner_;
+
+  Eigen::Vector2f frontier_point_;
  
  public:
   // SLAM
@@ -124,6 +127,7 @@ class Explorer {
 
   // Evidence grid
   EvidenceGrid evidence_grid_;
+  Frontier frontier_;
 };
 
 }  // namespace explorer

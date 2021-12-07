@@ -99,9 +99,10 @@ Explorer::Explorer(const string& map_file, ros::NodeHandle* n) :
     vehicle_(FLAGS_max_acceleration, FLAGS_max_deceleration, FLAGS_max_speed, FLAGS_length, FLAGS_width, FLAGS_del_length, FLAGS_del_width, FLAGS_safety_margin),
     global_planner_(),
     slam_(),
-    evidence_grid_() {
+    evidence_grid_(),
+    frontier_() {
 
-
+  frontier_point_ = Eigen::Vector2f(0,0);
   printf("Start Explorer Init\n");
   drive_pub_ = n->advertise<AckermannCurvatureDriveMsg>(
       "ackermann_curvature_drive", 1);
@@ -202,7 +203,7 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
   // SLAM
   vector<Vector2f> new_points;
   vector<Vector2f> new_open_points;
-  slam_.ObservePointCloud(point_cloud_, cloud_open, new_points, new_open_points);
+  bool slam_update = slam_.ObservePointCloud(point_cloud_, cloud_open, new_points, new_open_points);
 
   // TODO: update evidence grid
   Vector2f robot_loc(0,0);
@@ -214,6 +215,21 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
   global_planner_.updateWallGrid(new_walls);
   //global_planner_.AddWallsFromSLAM(new_points);
 
+
+  static double t_glpath_last = 0; // for rate limit
+  if (GetMonotonicTime() - t_glpath_last > 2 && slam_.isInitialized()) {
+    std::cout << "Slam: " << slam_update << "\n";
+  // if (slam_update) {
+    t_glpath_last = GetMonotonicTime();
+    std::cout << "SLAM Updated\n";
+    // Go to a new frontier
+    // Step 1: Find frontier point
+    // Step 2: Set frontier point as new global
+    frontier_point_ = frontier_.findFrontier(evidence_grid_, robot_loc_);
+    std::cout << "Frontier Loc: " << frontier_point_.transpose() << "\n";
+    SetNavGoal(frontier_point_, 0);
+  }
+
   // Vis slam map
   static double t_last = 0; // for rate limit
   if (GetMonotonicTime() - t_last > 2) {
@@ -221,23 +237,27 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
     slam_viz_msg_.header.stamp = ros::Time::now();
     visualization::ClearVisualizationMsg(slam_viz_msg_);
 
+    visualization::DrawCross(frontier_point_, 2., 0x000000, slam_viz_msg_);
+
     const vector<Vector2f> map = slam_.GetMap();
     for (const Vector2f& p : map) {
       visualization::DrawPoint(p, 0xC0C0C0, slam_viz_msg_);
     }
 
-    for (const Vector2f& p : new_open_points) {
-      visualization::DrawPoint(p, 0x00FF00, slam_viz_msg_);
-    }
+    // for (const Vector2f& p : new_open_points) {
+    //   visualization::DrawPoint(p, 0x00FF00, slam_viz_msg_);
+    // }
 
     // Plot global map
-    //evidence_grid_.PlotEvidenceVis(slam_viz_msg_);
-    global_planner_.PlotWallVis(slam_viz_msg_);
+    evidence_grid_.PlotEvidenceVis(slam_viz_msg_);
+    //global_planner_.PlotWallVis(slam_viz_msg_);
+    evidence_grid_.PlotNeighborsVis(frontier_point_, slam_viz_msg_);
 
     viz_pub_.publish(slam_viz_msg_);
   }
 
   
+
 
   // Post localization
   // Vector2f robot_loc(0, 0);

@@ -17,7 +17,7 @@ using vector_map::VectorMap;
 class Global_Planner {
  public:
 
-   const int NUM_PIXELS_GOAL = 3;
+   const float NUM_PIXELS_GOAL = 5.;
    const int NUM_ANGLES = 8;
 
    float x_min;

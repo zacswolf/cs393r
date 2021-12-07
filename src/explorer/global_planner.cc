@@ -37,7 +37,6 @@ Global_Planner::Global_Planner() {
    std::cout << "Map created\n";
 
    global_path_ = std::vector<Eigen::Vector2f>();
-
 }
 
 // Sets the global navigation goal at the provided global coordinates
@@ -94,6 +93,7 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
    grid_[start[2]](start[0], start[1]).cost = 0;
 
    // Begin A*
+   std::cout << "<GP A*> Beginning A*\n";
    Eigen::Vector3i current;
    while (!pri_queue.Empty()) {
       current = pri_queue.Pop();
@@ -111,7 +111,8 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
             if (new_cost < grid_[neighbor[2]](neighbor[0], neighbor[1]).cost) {
                grid_[neighbor[2]](neighbor[0], neighbor[1]).cost = new_cost;
                
-               float heuristic = (neighbor.segment(0,2) - goal.segment(0,2)).cast<float>().norm(); // Euclidean distance
+               // Note no longer optimal with the 1.2
+               float heuristic = 1.2 *(neighbor.segment(0,2) - goal.segment(0,2)).cast<float>().norm(); // Euclidean distance
                //float heuristic = abs(dist_to_goal[0]) + abs(dist_to_goal[1]); // Manhattan distance
                pri_queue.Push(neighbor, new_cost + heuristic);
                grid_[neighbor[2]](neighbor[0], neighbor[1]).parent = current;
@@ -120,32 +121,37 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
       }
 
    }
+   std::cout << "<GP A*> Finished A*\n";
 
    // Store solution (convert unordered map to vector)
    global_path_.clear();
-   global_path_.push_back(gridToPoint(current.segment(0,2)));
-
-   Eigen::Vector3i pt = current;
    
-   while (grid_[pt[2]](pt[0], pt[1]).parent != start) {
-      
-      Vector2f new_point = gridToPoint(grid_[pt[2]](pt[0], pt[1]).parent.segment(0,2));
-      Vector2f old_point = global_path_[global_path_.size()-1];
-      if ((new_point - old_point).norm() > 0.15) {
-         // Far point, interpolate
-         global_path_.push_back(new_point*0.2 + old_point*0.8);
-         global_path_.push_back(new_point*0.4 + old_point*0.6);
-         global_path_.push_back(new_point*0.6 + old_point*0.4);
-         global_path_.push_back(new_point*0.8 + old_point*0.2);
-         global_path_.push_back(new_point);
-      } else {
-         // Close point, no interpolation
-         global_path_.push_back(new_point);
-      }
-      pt = grid_[pt[2]](pt[0], pt[1]).parent;
-   }
+   global_path_.push_back(gridToPoint(current.segment(0,2)));
+   if (current != start) { //TODO: remove
 
-   std::reverse(global_path_.begin(), global_path_.end());
+      Eigen::Vector3i pt = current;
+
+      while (grid_[pt[2]](pt[0], pt[1]).parent != start) {
+         
+         Vector2f new_point = gridToPoint(grid_[pt[2]](pt[0], pt[1]).parent.segment(0,2));
+         Vector2f old_point = global_path_[global_path_.size()-1];
+         if ((new_point - old_point).norm() > 0.15) {
+            // Far point, interpolate
+            global_path_.push_back(new_point*0.2 + old_point*0.8);
+            global_path_.push_back(new_point*0.4 + old_point*0.6);
+            global_path_.push_back(new_point*0.6 + old_point*0.4);
+            global_path_.push_back(new_point*0.8 + old_point*0.2);
+            global_path_.push_back(new_point);
+         } else {
+            // Close point, no interpolation
+            global_path_.push_back(new_point);
+         }
+         pt = grid_[pt[2]](pt[0], pt[1]).parent;
+      }
+
+      std::reverse(global_path_.begin(), global_path_.end());
+
+   }
 
    this->path_index_ = 0;
 }
@@ -332,16 +338,16 @@ void Global_Planner::AddWallsFromSLAM(std::vector<Eigen::Vector2f> point_cloud) 
       Eigen::Vector2i(0, 2),
       Eigen::Vector2i(-2, 0),
       Eigen::Vector2i(2, 0),
-      Eigen::Vector2i(-3, 0),
+      //Eigen::Vector2i(-3, 0),
       Eigen::Vector2i(-2, 1),
       Eigen::Vector2i(-1, 2),
-      Eigen::Vector2i(0, 3),
+      //Eigen::Vector2i(0, 3),
       Eigen::Vector2i(1, 2),
       Eigen::Vector2i(2, 1),
-      Eigen::Vector2i(3, 0),
+      //Eigen::Vector2i(3, 0),
       Eigen::Vector2i(-2, -1),
       Eigen::Vector2i(-1, -2),
-      Eigen::Vector2i(0, -3),
+      //Eigen::Vector2i(0, -3),
       Eigen::Vector2i(1, -2),
       Eigen::Vector2i(2, -1),
    };
