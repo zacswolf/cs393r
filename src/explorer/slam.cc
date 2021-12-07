@@ -55,8 +55,8 @@ DEFINE_double(sd_odom_x, 1.0, "Std dev of odometry in x direction");
 DEFINE_double(sd_odom_y, 1.0, "Std dev of odometry in y direction");
 DEFINE_double(sd_odom_angle, 30.0, "Std dev of odometry angle");
 
-DEFINE_double(csm_transl_coarse_max, 0.8, "Max translation for coarse CSM");
-DEFINE_double(csm_angle_coarse_max, 30, "Max rotation for coarse CSM");
+DEFINE_double(csm_transl_coarse_max, 0.5, "Max translation for coarse CSM");
+DEFINE_double(csm_angle_coarse_max, 20, "Max rotation for coarse CSM");
 DEFINE_double(csm_fine_max_multiplier, 1.5, "Multiplier on coarse step for max translation & rotation for fine CSM");
 DEFINE_double(csm_transl_coarse_step, 0.1, "Translation step size for coarse CSM");
 DEFINE_double(csm_transl_fine_step, 0.01, "Translation step size for fine CSM");
@@ -102,14 +102,15 @@ void SLAM::GetPose(Eigen::Vector2f* loc, float* angle) const {
   } else {
     auto prev_pose = prev_poses_.back();
 
-    // float del_odom_angle = current_odom_angle_ - prev_pose_odom_angle_;
+    float del_odom_angle = current_odom_angle_ - prev_pose_odom_angle_;
     Eigen::Rotation2Df rotation_odom(-prev_pose_odom_angle_);
-    // Eigen::Vector2f del_odom = rotation_odom * (current_odom_loc_ - prev_pose_odom_loc_);
+    Eigen::Rotation2Df rotation_pose(prev_pose.angle);
+    Eigen::Vector2f del_odom = rotation_pose * rotation_odom * (current_odom_loc_ - prev_pose_odom_loc_);
 
     //std::cout << "SLAM Loc: " << prev_pose.loc.transpose() << " -- w/ Odom: -- " << (prev_pose.loc + del_odom).transpose() << "\n";
 
-    *loc = prev_pose.loc;// + del_odom;
-    *angle = prev_pose.angle;// + del_odom_angle;
+    *loc = prev_pose.loc + del_odom;
+    *angle = prev_pose.angle + del_odom_angle;
   }
 }
 
@@ -171,7 +172,7 @@ bool SLAM::ObservePointCloud(const std::vector<Vector2f>& cloud, const std::vect
 
     // Add first point cloud to map_
     for (uint i = 0; i < point_cloud.size(); i += FLAGS_map_scan_mod) {
-        map_.push_back(point_cloud[i]);
+        //map_.push_back(point_cloud[i]);
         new_points.push_back(point_cloud[i]);
     }
 
@@ -230,7 +231,7 @@ bool SLAM::ObservePointCloud(const std::vector<Vector2f>& cloud, const std::vect
       Eigen::Rotation2Df rotation_new_pose(pose.angle);
       for (uint i = 0; i < point_cloud.size(); i += FLAGS_map_scan_mod) {
         Eigen::Vector2f new_point = rotation_new_pose * point_cloud[i] + pose.loc;
-        map_.push_back(new_point);
+        //map_.push_back(new_point);
         new_points.push_back(new_point);
       }
 

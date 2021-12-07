@@ -144,6 +144,9 @@ class EvidenceGrid {
       if (evidence_grid_(x,y) <= 0.5) {
         evidence_grid_(x,y) = 0.;
       }
+      if (evidence_grid_(x,y+1) <= 0.5) {
+        evidence_grid_(x,y+1) = 0.;
+      }
 
       if (D > 0) {
         y = y + yi;
@@ -170,6 +173,9 @@ class EvidenceGrid {
       // Add to evidence grid, TODO: bayesian update
       if (evidence_grid_(x,y) <= 0.5) {
         evidence_grid_(x,y) = 0.;
+      }
+      if (evidence_grid_(x+1,y) <= 0.5) {
+        evidence_grid_(x+1,y) = 0.;
       }
 
       if (D > 0) {

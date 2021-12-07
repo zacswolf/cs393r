@@ -215,13 +215,24 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
   global_planner_.updateWallGrid(new_walls);
   //global_planner_.AddWallsFromSLAM(new_points);
 
+  // static int slam_update_counter = 4;
+  // if (slam_update) {
+  //   std::cout << "SLAM Updated\n";
+  //   slam_update_counter++;
+  //   if (slam_update_counter >= 4) {
+  //     slam_update_counter = 0;
+  //     frontier_point_ = frontier_.findFrontier(evidence_grid_, robot_loc_);
+  //     std::cout << "Frontier Loc: " << frontier_point_.transpose() << "\n";
+  //     SetNavGoal(frontier_point_, 0);
+  //   }
+  // }
 
   static double t_glpath_last = 0; // for rate limit
-  if (GetMonotonicTime() - t_glpath_last > 2 && slam_.isInitialized()) {
+  if (GetMonotonicTime() - t_glpath_last > 5 && slam_.isInitialized()) {
     std::cout << "Slam: " << slam_update << "\n";
   // if (slam_update) {
     t_glpath_last = GetMonotonicTime();
-    std::cout << "SLAM Updated\n";
+    //std::cout << "SLAM Updated\n";
     // Go to a new frontier
     // Step 1: Find frontier point
     // Step 2: Set frontier point as new global
@@ -239,10 +250,10 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
 
     visualization::DrawCross(frontier_point_, 2., 0x000000, slam_viz_msg_);
 
-    const vector<Vector2f> map = slam_.GetMap();
-    for (const Vector2f& p : map) {
-      visualization::DrawPoint(p, 0xC0C0C0, slam_viz_msg_);
-    }
+    // const vector<Vector2f> map = slam_.GetMap();
+    // for (const Vector2f& p : map) {
+    //   visualization::DrawPoint(p, 0xC0C0C0, slam_viz_msg_);
+    // }
 
     // for (const Vector2f& p : new_open_points) {
     //   visualization::DrawPoint(p, 0x00FF00, slam_viz_msg_);

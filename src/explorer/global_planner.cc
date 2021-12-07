@@ -112,7 +112,7 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
                grid_[neighbor[2]](neighbor[0], neighbor[1]).cost = new_cost;
                
                // Note no longer optimal with the 1.2
-               float heuristic = 1.2 *(neighbor.segment(0,2) - goal.segment(0,2)).cast<float>().norm(); // Euclidean distance
+               float heuristic = 1.0 *(neighbor.segment(0,2) - goal.segment(0,2)).cast<float>().norm(); // Euclidean distance
                //float heuristic = abs(dist_to_goal[0]) + abs(dist_to_goal[1]); // Manhattan distance
                pri_queue.Push(neighbor, new_cost + heuristic);
                grid_[neighbor[2]](neighbor[0], neighbor[1]).parent = current;
@@ -130,10 +130,15 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
    if (current != start) { //TODO: remove
 
       Eigen::Vector3i pt = current;
+      Eigen::Vector3i parent_pt = grid_[pt[2]](pt[0], pt[1]).parent;
 
-      while (grid_[pt[2]](pt[0], pt[1]).parent != start) {
+      bool done = false;
+      while (!done) {
          
-         Vector2f new_point = gridToPoint(grid_[pt[2]](pt[0], pt[1]).parent.segment(0,2));
+         parent_pt = grid_[pt[2]](pt[0], pt[1]).parent;
+         // old_ang = new_ang;
+         // new_ang = parent_pt[2];
+         Vector2f new_point = gridToPoint(parent_pt.segment(0,2));
          Vector2f old_point = global_path_[global_path_.size()-1];
          if ((new_point - old_point).norm() > 0.15) {
             // Far point, interpolate
@@ -146,7 +151,11 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
             // Close point, no interpolation
             global_path_.push_back(new_point);
          }
-         pt = grid_[pt[2]](pt[0], pt[1]).parent;
+         if (grid_[pt[2]](pt[0], pt[1]).parent == start) {
+            done = true;
+         } else {
+            pt = grid_[pt[2]](pt[0], pt[1]).parent;
+         }
       }
 
       std::reverse(global_path_.begin(), global_path_.end());
