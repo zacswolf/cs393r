@@ -16,6 +16,7 @@ using vector_map::VectorMap;
 
 class Global_Planner {
  public:
+  bool at_path_end_;
 
    const float NUM_PIXELS_GOAL = 5.;
    const int NUM_ANGLES = 8;
@@ -67,7 +68,9 @@ class Global_Planner {
 
    // Map grid
    std::vector<Eigen::Matrix<GridPt, -1, -1>> grid_;
-   Eigen::Matrix<bool, -1, -1> wall_grid_;
+
+   // Wall grid: 0 = open, 1 = wall, 2 = padding
+   Eigen::Matrix<int, -1, -1> wall_grid_;
 
  public:
    // Converts a map point to a grid point
@@ -102,6 +105,10 @@ class Global_Planner {
 
     // Index of nearest global path point to the vehicle - let's us restrict our search to only nearby path points
     int path_index_;
+
+    // simple path
+    std::vector<Eigen::Vector2f> simple_global_path_;
+    int simple_path_index_;
     
     // is ready
     bool is_ready_;

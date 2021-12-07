@@ -19,9 +19,11 @@ using std::vector;
 
 class Frontier {
  public:
-    explicit Frontier() {
+    bool no_frontier_;
+    explicit Frontier() : no_frontier_(false) {
         
     }
+    
     
     Vector2f findFrontier(EvidenceGrid evidence_grid, Vector2f robot_loc) {//, amrl_msgs::VisualizationMsg& vis_msg) {
 
@@ -51,10 +53,10 @@ class Frontier {
             //Eigen::Vector2i(-3, 0),
             Eigen::Vector2i(-2, 1),
             Eigen::Vector2i(-1, 2),
-            Eigen::Vector2i(0, 3),
+            //Eigen::Vector2i(0, 3),
             Eigen::Vector2i(1, 2),
             Eigen::Vector2i(2, 1),
-            Eigen::Vector2i(3, 0),
+            //Eigen::Vector2i(3, 0),
             Eigen::Vector2i(-2, -1),
             Eigen::Vector2i(-1, -2),
             //Eigen::Vector2i(0, -3),
@@ -64,14 +66,21 @@ class Frontier {
 
         Eigen::Matrix<bool,-1, -1> visited = Eigen::Matrix<bool,-1,-1>::Constant(evidence_grid.num_x, evidence_grid.num_y, false);
         std::queue<Vector2i> queue;
+        
         if (!(evidence_grid.evidence_grid_(grid_loc[0], grid_loc[1]) < .5)) {
             std::cout << "<Frontier finder> Starting loc is not open!\n";
             return evidence_grid.gridToPoint(grid_loc);
         }
         visited(grid_loc[0], grid_loc[1]) = true;
-        queue.push(grid_loc);
+        //queue.push(grid_loc);
+        for (Vector2i offset : big_offsets) {
+            Vector2i neighbor = grid_loc + offset;
+            queue.push(neighbor);
+        }
 
+        //int i = 8;
         while (!queue.empty()) {
+            //i -= (i!=0)*1;
             Vector2i current = queue.front();
             queue.pop();
             // Iterate over neighbors
@@ -82,6 +91,9 @@ class Frontier {
                     neighbors_wall = true;
                 }
             }
+            // if (i>0){
+            //     neighbors_wall = false;
+            // }
             if (!neighbors_wall) {
                 for (Vector2i offset : offsets) {
                     Vector2i neighbor = current + offset;
@@ -110,6 +122,7 @@ class Frontier {
             }
         }
         std::cout << "<Frontier finder> Did not find frontier point\n";
+        no_frontier_ = true;
         return evidence_grid.gridToPoint(grid_loc);
     }
 

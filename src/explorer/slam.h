@@ -40,7 +40,7 @@ class SLAM {
 
   
   // Observe a new point cloud.
-  bool ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud, const std::vector<Eigen::Vector2f>& cloud_open, std::vector<Eigen::Vector2f>& new_points, std::vector<Eigen::Vector2f>& new_points_open);
+  bool ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud, const std::vector<Eigen::Vector2f>& cloud_open, std::vector<Eigen::Vector2f>& new_points, std::vector<Eigen::Vector2f>& new_points_open, bool force_update);
 
   // Observe new odometry-reported location.
   void ObserveOdometry(const Eigen::Vector2f& odom_loc,

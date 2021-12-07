@@ -157,7 +157,7 @@ std::vector<Eigen::Vector2f> SLAM::ScanToPointCloud(
 
 }
 
-bool SLAM::ObservePointCloud(const std::vector<Vector2f>& cloud, const std::vector<Vector2f>& cloud_open, std::vector<Vector2f>& new_points, std::vector<Vector2f>& new_points_open) {
+bool SLAM::ObservePointCloud(const std::vector<Vector2f>& cloud, const std::vector<Vector2f>& cloud_open, std::vector<Vector2f>& new_points, std::vector<Vector2f>& new_points_open, bool force_update) {
   // A new laser scan has been observed. Decide whether to add it as a pose
   // for SLAM. If decided to add, align it to the scan from the last saved pose,
   // and save both the scan and the optimized pose.
@@ -192,7 +192,7 @@ bool SLAM::ObservePointCloud(const std::vector<Vector2f>& cloud, const std::vect
     Eigen::Vector2f loc_diff = current_odom_loc_ - prev_pose_odom_loc_;
 
     // Add a new pose when odom dist or angle diff is above threshhold
-    if (loc_diff.norm() > FLAGS_min_odom_loc_diff || RadToDeg(abs(angle_diff)) > FLAGS_min_odom_angle_diff) {
+    if (loc_diff.norm() > FLAGS_min_odom_loc_diff || RadToDeg(abs(angle_diff)) > FLAGS_min_odom_angle_diff || force_update) {
       std::cout << "Loc Diff: " << loc_diff.norm() << "\n";
       std::cout << "Angle Diff: " << RadToDeg(angle_diff) << "\n";
       std::cout << "Using laser scan!\n";

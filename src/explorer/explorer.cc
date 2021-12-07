@@ -160,41 +160,6 @@ void Explorer::UpdateOdometry(const Vector2f& loc,
 }
 
 
-///////////
-// SLAM MAP
-///////////
-// void PublishMap() {
-//   static double t_last = 0;
-//   if (GetMonotonicTime() - t_last < 0.5) {
-//     // Rate-limit visualization.
-//     return;
-//   }
-//   t_last = GetMonotonicTime();
-//   // vis_msg_.header.stamp = ros::Time::now();
-//   // ClearVisualizationMsg(vis_msg_);
-
-//   const vector<Vector2f> map = slam_.GetMap();
-//   for (const Vector2f& p : map) {
-//     visualization::DrawPoint(p, 0xC0C0C0, global_viz_msg_);
-//   }
-//   // visualization_publisher_.publish(vis_msg_);
-// }
-
-////////////
-// SLAM POSE
-////////////
-// void PublishPose() {
-//   Vector2f robot_loc(0, 0);
-//   float robot_angle(0);
-//   explorer_->slam_.GetPose(&robot_loc, &robot_angle);
-//   amrl_msgs::Localization2DMsg localization_msg;
-//   localization_msg.pose.x = robot_loc.x();
-//   localization_msg.pose.y = robot_loc.y();
-//   localization_msg.pose.theta = robot_angle;
-//   // LocalizationCallback(localization_msg);
-//   slam_loc_pub_.publish(localization_msg);
-// }
-
 
 void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
                                  const vector<Vector2f>& cloud_open) {
@@ -203,7 +168,9 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
   // SLAM
   vector<Vector2f> new_points;
   vector<Vector2f> new_open_points;
-  bool slam_update = slam_.ObservePointCloud(point_cloud_, cloud_open, new_points, new_open_points);
+  bool force_update = (!frontier_.no_frontier_) && global_planner_.at_path_end_;
+  // global_planner_.at_path_end_ = false;
+  bool slam_update = slam_.ObservePointCloud(point_cloud_, cloud_open, new_points, new_open_points, force_update);
 
   // TODO: update evidence grid
   Vector2f robot_loc(0,0);
@@ -215,27 +182,27 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
   global_planner_.updateWallGrid(new_walls);
   //global_planner_.AddWallsFromSLAM(new_points);
 
-  // static int slam_update_counter = 4;
-  // if (slam_update) {
-  //   std::cout << "SLAM Updated\n";
-  //   slam_update_counter++;
-  //   if (slam_update_counter >= 4) {
-  //     slam_update_counter = 0;
-  //     frontier_point_ = frontier_.findFrontier(evidence_grid_, robot_loc_);
-  //     std::cout << "Frontier Loc: " << frontier_point_.transpose() << "\n";
-  //     SetNavGoal(frontier_point_, 0);
-  //   }
-  // }
+  //static int slam_update_counter = 4;
+  if (slam_update) {
+    std::cout << "SLAM Updated\n";
+    // slam_update_counter++;
+    // if (slam_update_counter >= 4) {
+    //   slam_update_counter = 0;
+    //   frontier_point_ = frontier_.findFrontier(evidence_grid_, robot_loc_);
+    //   std::cout << "Frontier Loc: " << frontier_point_.transpose() << "\n";
+    //   SetNavGoal(frontier_point_, 0);
+    // }
+  }
 
   static double t_glpath_last = 0; // for rate limit
   if (GetMonotonicTime() - t_glpath_last > 5 && slam_.isInitialized()) {
-    std::cout << "Slam: " << slam_update << "\n";
   // if (slam_update) {
     t_glpath_last = GetMonotonicTime();
     //std::cout << "SLAM Updated\n";
     // Go to a new frontier
     // Step 1: Find frontier point
     // Step 2: Set frontier point as new global
+
     frontier_point_ = frontier_.findFrontier(evidence_grid_, robot_loc_);
     std::cout << "Frontier Loc: " << frontier_point_.transpose() << "\n";
     SetNavGoal(frontier_point_, 0);
@@ -304,6 +271,7 @@ void Explorer::Run() {
   if (global_planner_.IsReady()) {
     global_planner_.CheckPathValid(robot_loc_, robot_angle_);
     goal_point = global_planner_.GetLocalNavGoal(robot_loc_, robot_angle_);
+
     global_planner_.PlotGlobalPathVis(global_viz_msg_);
     global_planner_.PlotLocalPathVis(local_viz_msg_);
   }
