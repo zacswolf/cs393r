@@ -41,6 +41,7 @@
 
 
 using Eigen::Vector2f;
+using Eigen::Vector3f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
 using amrl_msgs::VisualizationMsg;
 using std::string;
@@ -268,9 +269,15 @@ void Explorer::Run() {
   // const Vector2f goal_point = r_goal * (nav_goal_loc_ - robot_loc_);
   // visualization::DrawCross(goal_point, .5, 0x39B81D, local_viz_msg_);
   Vector2f goal_point = Vector2f(0,0);
+  bool is_backward = false;
+
   if (global_planner_.IsReady()) {
     global_planner_.CheckPathValid(robot_loc_, robot_angle_);
-    goal_point = global_planner_.GetLocalNavGoal(robot_loc_, robot_angle_);
+
+    Vector3f loc_nav_goal = global_planner_.GetLocalNavGoal(robot_loc_, robot_angle_);
+    goal_point = loc_nav_goal.segment(0,2);
+    is_backward = loc_nav_goal[2];
+    
 
     global_planner_.PlotGlobalPathVis(global_viz_msg_);
     global_planner_.PlotLocalPathVis(local_viz_msg_);
@@ -343,7 +350,7 @@ void Explorer::Run() {
   drive_msg_.curvature = best_path.curvature;
 
   // TOC
-  drive_msg_.velocity = vehicle_.timeOptimalController(vel_pred, 1./FLAGS_update_rate, best_path.free_path_length, goal_point_pred);
+  drive_msg_.velocity = vehicle_.timeOptimalController(vel_pred, 1./FLAGS_update_rate, best_path.free_path_length, goal_point_pred, is_backward);
 
 
   // Shift previous values, for forward predict

@@ -181,24 +181,38 @@ void Car::calcPathMetrics(Path& path, const std::vector<Vector2f>& point_cloud) 
   path.add_collision_data(free_path_length, closest_point, min_clearance, clearance_point);
 }
 
-float Car::timeOptimalController(float vel, float update_period, float free_path_length, Vector2f goal_point) {
+float Car::timeOptimalController(float vel, float update_period, float free_path_length, Vector2f goal_point, bool is_backwards) {
   double distance_to_stop_after_accel = update_period * (vel + .5*max_acceleration*update_period) + pow(vel + max_acceleration*update_period, 2)/(2*max_deceleration);
 
   // Distance till robot needs to stop
   float goal_dist = goal_point.norm();
 
-  if (goal_dist < .5) {
-    goal_dist *= (goal_point[0] > 0);
+
+  if (goal_dist < .1) {
+    goal_dist = 0;
   }
+  
   
   float stop = std::min(goal_dist, free_path_length);
 
+  if (is_backwards) {
+    stop = goal_dist;
+  }
+
   if (stop > distance_to_stop_after_accel) {
       // Accelerating or cruising
-      return std::min(vel + max_acceleration*update_period, max_speed);
+      if (is_backwards) {
+        return std::max(vel - max_acceleration*update_period, -max_speed);
+      } else {
+        return std::min(vel + max_acceleration*update_period, max_speed);
+      }
   } else {
       // Decelerating or stopped
-      return std::max(vel - max_deceleration*update_period, 0.);
+      if (is_backwards) {
+        return std::min(vel + max_deceleration*update_period, 0.);
+      } else {
+        return std::max(vel - max_deceleration*update_period, 0.);
+      }
   }
 }
 

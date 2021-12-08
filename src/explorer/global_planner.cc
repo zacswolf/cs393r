@@ -6,6 +6,7 @@
 #include "visualization/visualization.h"
 
 using Eigen::Vector2f;
+using Eigen::Vector3f;
 using std::vector;
 using geometry::line2f;
 
@@ -36,7 +37,7 @@ Global_Planner::Global_Planner(): at_path_end_(false) {
    wall_grid_ = Eigen::Matrix<int,-1,-1>::Constant(num_x, num_y, 0);
    std::cout << "Map created\n";
 
-   global_path_ = std::vector<Eigen::Vector2f>();
+   global_path_ = std::vector<Eigen::Vector3f>();
    simple_global_path_ = std::vector<Eigen::Vector2f>();
 }
 
@@ -47,24 +48,27 @@ void Global_Planner::SetGlobalNavGoal(Eigen::Vector2f loc) {
 }
 
 // Returns the local coordinates of the intermediate goal along the global path
-Eigen::Vector2f Global_Planner::GetLocalNavGoal(Vector2f veh_loc, float veh_angle) {
-   Eigen::Vector2f local_goal;
+Eigen::Vector3f Global_Planner::GetLocalNavGoal(Vector2f veh_loc, float veh_angle) {
+   Eigen::Vector3f local_goal;
 
    if (global_path_.size() == 0) {
-      return Vector2f(0.,0.);
+      return Eigen::Vector3f(0.,0.,0.);
    }
 
    UpdatePathIndex(veh_loc, veh_angle);
 
    local_goal = global_path_[std::min(path_index_ + 4, (int)global_path_.size()-1)];
 
+   Vector2f local_goal_2f = local_goal.segment(0,2);
+
    at_path_end_ = path_index_ >= ((int)global_path_.size()-1) - 3;
 
    Eigen::Rotation2Df r(-veh_angle);
-   local_goal = r * (local_goal - veh_loc);
-   local_nav_goal_ = local_goal;
-
+   local_goal_2f = r * (local_goal_2f - veh_loc);
    
+   local_goal[0] = local_goal_2f[0];
+   local_goal[1] = local_goal_2f[1];
+   local_nav_goal_ = local_goal;
    return local_goal;
    
 }
@@ -91,10 +95,10 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
    Eigen::Vector2i goal_2d = pointToGrid(global_nav_goal_);
    Eigen::Vector3i goal = Eigen::Vector3i(goal_2d[0], goal_2d[1], 0);
 
-   SimpleQueue<Eigen::Vector3i, float> pri_queue;
+   SimpleQueue<Eigen::Vector4i, float> pri_queue;
 
    const Eigen::Vector2i start_2d = pointToGrid(veh_loc);
-   const Eigen::Vector3i start = Eigen::Vector3i(start_2d[0], start_2d[1], rounded_angle_ind);
+   const Eigen::Vector4i start = Eigen::Vector4i(start_2d[0], start_2d[1], rounded_angle_ind, 0);
    
    pri_queue.Push(start, 0); // Push initial location
    
@@ -110,7 +114,7 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
 
    // Begin A*
    std::cout << "<GP A*> Beginning A*\n";
-   Eigen::Vector3i current;
+   Eigen::Vector4i current;
    while (!pri_queue.Empty()) {
       current = pri_queue.Pop();
       Vector2f rel_to_goal = current.cast<float>().segment(0,2) - goal.cast<float>().segment(0,2);
@@ -118,10 +122,13 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
          std::cout << rel_to_goal.norm() << "\n\n";
          break;
       } else {
-         vector<Eigen::Vector3i> neighbors = GetNeighbors(current);
-         for (Eigen::Vector3i& neighbor : neighbors) {
-
+         vector<Eigen::Vector4i> neighbors = GetNeighbors(current);
+         for (Eigen::Vector4i& neighbor : neighbors) {
+            bool is_backward = neighbor[3];
             float edge_cost = (neighbor.segment(0,2) - current.segment(0,2)).cast<float>().norm();
+
+            // Penalize edge_cost if we have to go backwards
+            edge_cost += is_backward * (edge_cost * 100);
 
             // Neighbors can be in wall padding if current is in wall padding
             // We want to penalize moving within wall padding so we add 10 map pixels to the edge cost
@@ -148,35 +155,42 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
    // Store solution (convert unordered map to vector)
    global_path_.clear();
    
-   global_path_.push_back(gridToPoint(current.segment(0,2)));
+   Eigen::Vector2f path_point = gridToPoint(current.segment(0,2));
+   global_path_.push_back(Eigen::Vector3f(path_point[0], path_point[1], current[3]));
+
    if (current != start) { //TODO: remove
 
-      Eigen::Vector3i pt = current;
-      Eigen::Vector3i parent_pt = grid_[pt[2]](pt[0], pt[1]).parent;
+      Eigen::Vector4i loc = current;
+      Eigen::Vector4i parent_loc = grid_[loc[2]](loc[0], loc[1]).parent;
 
       bool done = false;
       while (!done) {
          
-         parent_pt = grid_[pt[2]](pt[0], pt[1]).parent;
+         parent_loc = grid_[loc[2]](loc[0], loc[1]).parent;
          // old_ang = new_ang;
          // new_ang = parent_pt[2];
-         Vector2f new_point = gridToPoint(parent_pt.segment(0,2));
-         Vector2f old_point = global_path_[global_path_.size()-1];
-         if ((new_point - old_point).norm() > 0.15) {
+         Vector2f parent_point = gridToPoint(parent_loc.segment(0,2));
+         
+         Vector3f new_point = Vector3f(parent_point[0], parent_point[1], parent_loc[3]);
+         Vector3f old_point = global_path_[global_path_.size()-1];
+         if ((new_point - old_point).segment(0,2).norm() > 0.15) {
             // Far point, interpolate
-            global_path_.push_back(new_point*0.2 + old_point*0.8);
-            global_path_.push_back(new_point*0.4 + old_point*0.6);
-            global_path_.push_back(new_point*0.6 + old_point*0.4);
-            global_path_.push_back(new_point*0.8 + old_point*0.2);
-            global_path_.push_back(new_point);
+            for (float step = 0.2; step < 1.001; step += 0.2) {
+               Vector3f interp_point = Vector3f(0,0,0);
+               interp_point[0] = new_point[0]*step + old_point[0]*(1-step);
+               interp_point[1] = new_point[1]*step + old_point[1]*(1-step);
+               interp_point[2] = old_point[2];
+
+               global_path_.push_back(interp_point);
+            }
          } else {
             // Close point, no interpolation
             global_path_.push_back(new_point);
          }
-         if (grid_[pt[2]](pt[0], pt[1]).parent == start) {
+         if (grid_[loc[2]](loc[0], loc[1]).parent == start) {
             done = true;
          } else {
-            pt = grid_[pt[2]](pt[0], pt[1]).parent;
+            loc = grid_[loc[2]](loc[0], loc[1]).parent;
          }
       }
 
@@ -191,8 +205,8 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
 void Global_Planner::UpdatePathIndex(Vector2f veh_loc, float veh_angle) {
 
    if (path_index_ < (int)global_path_.size() - 1) {
-      float dist_to_current_point = (global_path_[path_index_] - veh_loc).norm();
-      float dist_to_next_point = (global_path_[path_index_ + 1] - veh_loc).norm();
+      float dist_to_current_point = (global_path_[path_index_].segment(0,2) - veh_loc).norm();
+      float dist_to_next_point = (global_path_[path_index_ + 1].segment(0,2) - veh_loc).norm();
       if (dist_to_next_point < dist_to_current_point) {
          path_index_++;
       }
@@ -204,7 +218,7 @@ void Global_Planner::UpdatePathIndex(Vector2f veh_loc, float veh_angle) {
 // Checks whether the global path is still valid, recomputing the path if not
 void Global_Planner::CheckPathValid(Vector2f veh_loc, float veh_angle) {
 
-   if ((global_path_[path_index_] - veh_loc).norm() > 2.) {
+   if ((global_path_[path_index_].segment(0,2) - veh_loc).norm() > 2.) {
       ComputeGlobalPath(veh_loc, veh_angle);
    }
 
@@ -230,15 +244,15 @@ void Global_Planner::PlotWallVis(amrl_msgs::VisualizationMsg& vis_msg) {
 // Plots the global path plan to the provided visualization message
 void Global_Planner::PlotGlobalPathVis(amrl_msgs::VisualizationMsg& vis_msg) {
 
-   for (Eigen::Vector2f pt : global_path_) {
-      visualization::DrawCross(pt, 0.05, 0x000000, vis_msg);
+   for (Eigen::Vector3f pt : global_path_) {
+      visualization::DrawCross(pt.segment(0,2), 0.05, 0x000000, vis_msg);
    }
 
 }
 
 // Plots the local path plan to the provided visualization message
 void Global_Planner::PlotLocalPathVis(amrl_msgs::VisualizationMsg& vis_msg) {
-   visualization::DrawCross(local_nav_goal_, .5, 0x39B81D, vis_msg);
+   visualization::DrawCross(local_nav_goal_.segment(0,2), .5, 0x39B81D, vis_msg);
 }
 
 Eigen::Vector2i Global_Planner::pointToGrid(Eigen::Vector2f pt) {
@@ -252,59 +266,84 @@ Eigen::Vector2f Global_Planner::gridToPoint(Eigen::Vector2i grid_pt) {
    return cast_grid_pt * FLAGS_raster_pixel_size + Eigen::Vector2f(x_min, y_min);
 }
 
-std::vector<Eigen::Vector3i> Global_Planner::GetNeighbors(Eigen::Vector3i current) {
-   vector<Eigen::Vector3i> neighbors = vector<Eigen::Vector3i>();
+std::vector<Eigen::Vector4i> Global_Planner::GetNeighbors(Eigen::Vector4i current) {
+   vector<Eigen::Vector4i> neighbors = vector<Eigen::Vector4i>();
    
    int current_ang = current[2];
 
-   Eigen::Vector3i pot_neighbors[8][3] = {
+   // (x, y, angle, is_backward)
+   const static Eigen::Vector4i pot_neighbors[8][6] = {
       {
          // 0
-         Eigen::Vector3i(1, 0, 0),
-         Eigen::Vector3i(10, 5, 1),
-         Eigen::Vector3i(10, -5, 7)
+         Eigen::Vector4i(1, 0, 0, 0),
+         Eigen::Vector4i(10, 5, 1, 0),
+         Eigen::Vector4i(10, -5, 7, 0),
+         Eigen::Vector4i(-1, 0, 0, 1),
+         Eigen::Vector4i(-10, 5, 7, 1),
+         Eigen::Vector4i(-10, -5, 1, 1),
       },
       {
          // 1
-         Eigen::Vector3i(1, 1, 1),
-         Eigen::Vector3i(5, 10, 2),
-         Eigen::Vector3i(10, 5, 0)
+         Eigen::Vector4i(1, 1, 1, 0),
+         Eigen::Vector4i(5, 10, 2, 0),
+         Eigen::Vector4i(10, 5, 0, 0),
+         Eigen::Vector4i(-1, -1, 1, 1),
+         Eigen::Vector4i(-10, -5, 0, 1),
+         Eigen::Vector4i(-5, -10, 2, 1)
       },
       {
          // 2
-         Eigen::Vector3i(0, 1, 2),
-         Eigen::Vector3i(-5, 10, 3),
-         Eigen::Vector3i(5, 10, 1)
+         Eigen::Vector4i(0, 1, 2, 0),
+         Eigen::Vector4i(-5, 10, 3, 0),
+         Eigen::Vector4i(5, 10, 1, 0),
+         Eigen::Vector4i(0, -1, 2, 1),
+         Eigen::Vector4i(-5, -10, 1, 1),
+         Eigen::Vector4i(5, -10, 3, 1)
       },
       {
          // 3
-         Eigen::Vector3i(-1, 1, 3),
-         Eigen::Vector3i(-10, 5, 4),
-         Eigen::Vector3i(-5, 10, 2)
+         Eigen::Vector4i(-1, 1, 3, 0),
+         Eigen::Vector4i(-10, 5, 4, 0),
+         Eigen::Vector4i(-5, 10, 2, 0),
+         Eigen::Vector4i(1, -1, 3, 1),
+         Eigen::Vector4i(5, -10, 2, 1),
+         Eigen::Vector4i(10, -5, 4, 1)
       },
       {
          // 4
-         Eigen::Vector3i(-1, 0, 4),
-         Eigen::Vector3i(-10, -5, 5),
-         Eigen::Vector3i(-10, 5, 3)
+         Eigen::Vector4i(-1, 0, 4, 0),
+         Eigen::Vector4i(-10, -5, 5, 0),
+         Eigen::Vector4i(-10, 5, 3, 0),
+         Eigen::Vector4i(1, 0, 4, 1),
+         Eigen::Vector4i(10, -5, 3, 1),
+         Eigen::Vector4i(10, 5, 5, 1)
       },
       {
          // 5
-         Eigen::Vector3i(-1, -1, 5),
-         Eigen::Vector3i(-5, -10, 6),
-         Eigen::Vector3i(-10, -5, 4)
+         Eigen::Vector4i(-1, -1, 5, 0),
+         Eigen::Vector4i(-5, -10, 6, 0),
+         Eigen::Vector4i(-10, -5, 4, 0),
+         Eigen::Vector4i(1, 1, 5, 1),
+         Eigen::Vector4i(10, 5, 4, 1),
+         Eigen::Vector4i(5, 10, 6, 1)
       },
       {
          // 6
-         Eigen::Vector3i(0, -1, 6),
-         Eigen::Vector3i(5, -10, 7),
-         Eigen::Vector3i(-5, -10, 5)
+         Eigen::Vector4i(0, -1, 6, 0),
+         Eigen::Vector4i(5, -10, 7, 0),
+         Eigen::Vector4i(-5, -10, 5, 0),
+         Eigen::Vector4i(0, 1, 6, 1),
+         Eigen::Vector4i(5, 10, 5, 1),
+         Eigen::Vector4i(-5, 10, 7, 1)
       },
       {
          // 7
-         Eigen::Vector3i(1, -1, 7),
-         Eigen::Vector3i(10, -5, 0),
-         Eigen::Vector3i(5, -10, 6)
+         Eigen::Vector4i(1, -1, 7, 0),
+         Eigen::Vector4i(10, -5, 0, 0),
+         Eigen::Vector4i(5, -10, 6, 0),
+         Eigen::Vector4i(-1, 1, 7, 1),
+         Eigen::Vector4i(-5, 10, 6, 1),
+         Eigen::Vector4i(-10, 5, 0, 1)
       }
    };
 
@@ -312,7 +351,7 @@ std::vector<Eigen::Vector3i> Global_Planner::GetNeighbors(Eigen::Vector3i curren
 
    bool in_padding = (wall_grid_(current[0], current[1]) == 2);
 
-   for (Eigen::Vector3i neighbor : pot_neighbors[current_ang]){
+   for (Eigen::Vector4i neighbor : pot_neighbors[current_ang]){
 
       bool is_valid_neighbor = true;
 
@@ -320,7 +359,7 @@ std::vector<Eigen::Vector3i> Global_Planner::GetNeighbors(Eigen::Vector3i curren
       cur[0] = current[0];
       cur[1] = current[1];
 
-      Eigen::Vector3i nei = neighbor;
+      Eigen::Vector4i nei = neighbor;
       nei[0] += cur[0];
       nei[1] += cur[1];
 

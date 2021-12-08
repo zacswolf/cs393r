@@ -35,7 +35,7 @@ class Global_Planner {
     void SetGlobalNavGoal(Eigen::Vector2f loc);
 
     // Returns the local coordinates of the intermediate goal along the global path
-    Eigen::Vector2f GetLocalNavGoal(Vector2f veh_loc, float veh_angle);
+    Eigen::Vector3f GetLocalNavGoal(Vector2f veh_loc, float veh_angle);
 
     // Computes the global path from the vehicle's pose to the global nav goal
     void ComputeGlobalPath(Vector2f veh_loc, float veh_angle);
@@ -61,7 +61,7 @@ class Global_Planner {
  private:
  
    struct GridPt {
-      Eigen::Vector3i parent = Eigen::Vector3i(-1, -1, -1); //TODO FIX
+      Eigen::Vector4i parent = Eigen::Vector4i(-1, -1, -1, -1); //TODO FIX
       float cost = std::numeric_limits<float>::max();
    };
    
@@ -83,7 +83,7 @@ class Global_Planner {
    void updateWallGrid(std::unordered_set<Eigen::Vector2i, matrix_hash<Eigen::Vector2i>> new_walls);
  private:
    // Return all neighbors to a grid point
-   std::vector<Eigen::Vector3i> GetNeighbors(Eigen::Vector3i current);
+   std::vector<Eigen::Vector4i> GetNeighbors(Eigen::Vector4i current);
 
     // Map of the environment.
     vector_map::VectorMap map_;
@@ -95,13 +95,13 @@ class Global_Planner {
     Eigen::Vector2f global_nav_goal_;
 
     // Local coordinates for the temporary goal
-    Eigen::Vector2f local_nav_goal_;
+    Eigen::Vector3f local_nav_goal_;
 
     // Distance tom look ahead on global path for selecting the local goal
     float local_nav_dist_;
 
     // Global path - sequence of points
-    std::vector<Eigen::Vector2f> global_path_;
+    std::vector<Eigen::Vector3f> global_path_;
 
     // Index of nearest global path point to the vehicle - let's us restrict our search to only nearby path points
     int path_index_;

@@ -23,7 +23,7 @@ class Car {
 
     void calcPathMetrics(Path& path, const std::vector<Vector2f>& point_cloud);
 
-    float timeOptimalController(float vel, float update_period, float free_path_length, Vector2f goal_point);
+    float timeOptimalController(float vel, float update_period, float free_path_length, Vector2f goal_point, bool is_backwards);
 
  private:
     double max_acceleration;

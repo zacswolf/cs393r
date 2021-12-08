@@ -89,6 +89,7 @@ float Path::rate_path(const Vector2f& goal_point, float previous_curv) {
 }
 
 float Path::rate_path_alt(const Vector2f& goal_point, float previous_curv) {
+  bool is_backwards = goal_point[0] < 0;
 
   float fpl_cost = 0;
   float clearance_cost = 0;
@@ -107,17 +108,11 @@ float Path::rate_path_alt(const Vector2f& goal_point, float previous_curv) {
     fpl_cost = 0;
   }
 
-  // if (this->free_path_length > 4.) {
-  //   // don't care
-  //   fpl_cost = 0;
-  //   clearance_cost = 0;
-  // } else if (this->free_path_length > 2) {
-  //   // start worry about clearance
-  //   fpl_cost = 0;
-  // } else {
-  //   // avoid
-  //   fpl_cost = ;
-  // }
+  if (is_backwards) {
+    clearance_cost = 0;
+    fpl_cost = 0;
+    angle_to_goal = atan2(goal_point[1], -goal_point[0]);
+  }
 
   goal_cost = pow(this->curvature - 2 * angle_to_goal, 2); // range: -3.14 to 3.14
 
