@@ -169,7 +169,7 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
   // SLAM
   vector<Vector2f> new_points;
   vector<Vector2f> new_open_points;
-  bool force_update = (!frontier_.no_frontier_) && global_planner_.at_path_end_;
+  bool force_update = false;//(!frontier_.no_frontier_) && global_planner_.at_path_end_;
   // global_planner_.at_path_end_ = false;
   bool slam_update = slam_.ObservePointCloud(point_cloud_, cloud_open, new_points, new_open_points, force_update);
 

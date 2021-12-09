@@ -24,6 +24,7 @@ Global_Planner::Global_Planner(): at_path_end_(false) {
 
    // Turn Map into grid
    grid_ = std::vector<Eigen::Matrix<GridPt,-1,-1>>(FLAGS_num_angles);
+   
    x_min = -50;
    x_max = 50;
    
@@ -32,7 +33,8 @@ Global_Planner::Global_Planner(): at_path_end_(false) {
 
    num_x = (x_max - x_min) / FLAGS_raster_pixel_size;
    num_y = (y_max - y_min) / FLAGS_raster_pixel_size;
-   
+
+   simple_grid_ = Eigen::Matrix<GridPtSimple,-1,-1>::Constant(num_x, num_y, GridPtSimple{});
    fill(grid_.begin(), grid_.end(), Eigen::Matrix<GridPt,-1,-1>::Constant(num_x, num_y, GridPt{}));
    wall_grid_ = Eigen::Matrix<int,-1,-1>::Constant(num_x, num_y, 0);
    std::cout << "Map created\n";
@@ -57,7 +59,7 @@ Eigen::Vector3f Global_Planner::GetLocalNavGoal(Vector2f veh_loc, float veh_angl
 
    UpdatePathIndex(veh_loc, veh_angle);
 
-   local_goal = global_path_[std::min(path_index_ + 4, (int)global_path_.size()-1)];
+   local_goal = global_path_[std::min(path_index_ + 1, (int)global_path_.size()-1)];
 
    Vector2f local_goal_2f = local_goal.segment(0,2);
 
@@ -65,6 +67,14 @@ Eigen::Vector3f Global_Planner::GetLocalNavGoal(Vector2f veh_loc, float veh_angl
 
    Eigen::Rotation2Df r(-veh_angle);
    local_goal_2f = r * (local_goal_2f - veh_loc);
+   local_goal_2f = local_goal_2f.array() / local_goal_2f.norm();
+
+   bool going_backward = (global_path_[path_index_][2] > 0);
+   bool going_backward_lookahead = (global_path_[path_index_ + 1][2] > 0);
+   if (going_backward != going_backward_lookahead) {
+      local_goal_2f[1] *= -1;
+   }
+   local_goal[2] = going_backward;
    
    local_goal[0] = local_goal_2f[0];
    local_goal[1] = local_goal_2f[1];
@@ -75,14 +85,17 @@ Eigen::Vector3f Global_Planner::GetLocalNavGoal(Vector2f veh_loc, float veh_angl
 
 // Computes the global path from the vehicle's pose to the global nav goal
 void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
-   
+
+   Eigen::Vector2i goal_2d = pointToGrid(global_nav_goal_);
+   Eigen::Vector3i goal = Eigen::Vector3i(goal_2d[0], goal_2d[1], 0);
+
    // 
    // Compute simple path
    // 
 
 
    // 
-   // Compute lattice planned path
+   // Compute lattice planned A* path
    // 
 
 
@@ -92,12 +105,9 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
    rounded_angle_ind = (rounded_angle_ind % NUM_ANGLES + NUM_ANGLES) % NUM_ANGLES;
    std::cout << "Angle Ind: " << rounded_angle_ind << "\n";
 
-   Eigen::Vector2i goal_2d = pointToGrid(global_nav_goal_);
-   Eigen::Vector3i goal = Eigen::Vector3i(goal_2d[0], goal_2d[1], 0);
-
    SimpleQueue<Eigen::Vector4i, float> pri_queue;
 
-   const Eigen::Vector2i start_2d = pointToGrid(veh_loc);
+   Eigen::Vector2i start_2d = pointToGrid(veh_loc);
    const Eigen::Vector4i start = Eigen::Vector4i(start_2d[0], start_2d[1], rounded_angle_ind, 0);
    
    pri_queue.Push(start, 0); // Push initial location
@@ -128,7 +138,10 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
             float edge_cost = (neighbor.segment(0,2) - current.segment(0,2)).cast<float>().norm();
 
             // Penalize edge_cost if we have to go backwards
-            edge_cost += is_backward * (edge_cost * 100);
+            if (is_backward) {
+               edge_cost *= 1024;
+            }
+            //edge_cost += is_backward * (edge_cost * 100);
 
             // Neighbors can be in wall padding if current is in wall padding
             // We want to penalize moving within wall padding so we add 10 map pixels to the edge cost
@@ -170,12 +183,14 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
          // old_ang = new_ang;
          // new_ang = parent_pt[2];
          Vector2f parent_point = gridToPoint(parent_loc.segment(0,2));
+         Vector2f loc_point = gridToPoint(loc.segment(0,2));
          
          Vector3f new_point = Vector3f(parent_point[0], parent_point[1], parent_loc[3]);
-         Vector3f old_point = global_path_[global_path_.size()-1];
+         Vector3f old_point = Vector3f(loc_point[0], loc_point[1], loc[3]);
+         
          if ((new_point - old_point).segment(0,2).norm() > 0.15) {
             // Far point, interpolate
-            for (float step = 0.2; step < 1.001; step += 0.2) {
+            for (float step = 0.125; step < 1.001; step += 0.125) {
                Vector3f interp_point = Vector3f(0,0,0);
                interp_point[0] = new_point[0]*step + old_point[0]*(1-step);
                interp_point[1] = new_point[1]*step + old_point[1]*(1-step);
@@ -185,7 +200,9 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_loc, float veh_angle) {
             }
          } else {
             // Close point, no interpolation
-            global_path_.push_back(new_point);
+            Vector3f mod_new_point = new_point;
+            mod_new_point[2] = old_point[2];
+            global_path_.push_back(mod_new_point);
          }
          if (grid_[loc[2]](loc[0], loc[1]).parent == start) {
             done = true;
@@ -245,7 +262,11 @@ void Global_Planner::PlotWallVis(amrl_msgs::VisualizationMsg& vis_msg) {
 void Global_Planner::PlotGlobalPathVis(amrl_msgs::VisualizationMsg& vis_msg) {
 
    for (Eigen::Vector3f pt : global_path_) {
-      visualization::DrawCross(pt.segment(0,2), 0.05, 0x000000, vis_msg);
+      if (pt[2]) {
+         visualization::DrawCross(pt.segment(0,2), 0.05, 0xAA0000, vis_msg);
+      } else {
+         visualization::DrawCross(pt.segment(0,2), 0.05, 0x000000, vis_msg);
+      }
    }
 
 }

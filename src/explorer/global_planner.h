@@ -64,10 +64,18 @@ class Global_Planner {
       Eigen::Vector4i parent = Eigen::Vector4i(-1, -1, -1, -1); //TODO FIX
       float cost = std::numeric_limits<float>::max();
    };
+
+   struct GridPtSimple {
+      Eigen::Vector2i parent = Eigen::Vector2i(-1, -1);
+      float cost = std::numeric_limits<float>::max();
+   };
    
 
    // Map grid
    std::vector<Eigen::Matrix<GridPt, -1, -1>> grid_;
+
+   // Simple map grid
+   Eigen::Matrix<GridPtSimple, -1, -1> simple_grid_;
 
    // Wall grid: 0 = open, 1 = wall, 2 = padding
    Eigen::Matrix<int, -1, -1> wall_grid_;
