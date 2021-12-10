@@ -70,7 +70,7 @@ Eigen::Vector3f Global_Planner::GetLocalNavGoal(Vector2f veh_loc, float veh_angl
 
    at_path_end_ = path_index_ >= ((int)global_path_.size()-1) - 2;
 
-   int path_lookahead = 4;
+   int path_lookahead = 7;
 
    int local_path_idx = std::min(path_index_ + path_lookahead, (int)global_path_.size()-1);
 
@@ -145,7 +145,9 @@ void Global_Planner::SimpleAStar(Vector2i veh_loc, Vector2i goal_loc) {
             // Neighbors can be in wall padding if current is in wall padding
             // We want to penalize moving within wall padding so we add 10 map pixels to the edge cost
             bool neighbor_in_padding = (wall_grid_(neighbor[0], neighbor[1]) == 2);
-            edge_cost += neighbor_in_padding * 10;
+            if (neighbor_in_padding) {
+               edge_cost *= 5;
+            }
             
             float new_cost = simple_grid_(current[0], current[1]).cost + edge_cost;
             if (new_cost < simple_grid_(neighbor[0], neighbor[1]).cost) {
@@ -297,13 +299,20 @@ void Global_Planner::ComplexAStar(Vector2i veh_loc, float veh_angle, Vector2i go
 
             float dist = (new_point.segment(0,2) - old_point.segment(0,2)).norm();
             Vector2f norm_vec = (new_point.segment(0,2) - old_point.segment(0,2)).array() / dist;
+            //std::cout << "Dist: " << dist << " --- Vec: " << norm_vec.transpose() << "\n";
+            //std::cout << "    Old Point: " << old_point.segment(0,2).transpose() << "\n";
             float step_size = 0.1;
             for (float step = step_size; step <= dist; step += step_size) {
-               Vector2f interp_point_2f = old_point.segment(0,2) + norm_vec * step_size;
+               Vector2f interp_point_2f = old_point.segment(0,2) + norm_vec * step;
+               //std::cout << "    Int Point: " << interp_point_2f.transpose() << "\n";
                Vector3f interp_point_3f = Vector3f(interp_point_2f[0], interp_point_2f[1], old_point[2]);
                
                global_path_.push_back(interp_point_3f);
             }
+            //std::cout << "    New Point: " << new_point.segment(0,2).transpose() << "\n";
+            Vector3f mod_new_point = new_point;
+            mod_new_point[2] = old_point[2];
+            global_path_.push_back(mod_new_point);
          } else {
             // Close point, no interpolation
             Vector3f mod_new_point = new_point;
@@ -320,8 +329,6 @@ void Global_Planner::ComplexAStar(Vector2i veh_loc, float veh_angle, Vector2i go
       std::reverse(global_path_.begin(), global_path_.end());
 
    }
-
-   this->path_index_ = 0;
 }
 
 // Computes the global path from the vehicle's pose to the global nav goal
@@ -330,6 +337,7 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_point, float veh_angle) {
    Eigen::Vector2i goal_loc = pointToGrid(global_nav_goal_);
    Eigen::Vector2i veh_loc = pointToGrid(veh_point);
    
+   this->path_index_ = 0;
 
    if (path_algo_ == PathAlgo::Mixed) {
       // Compute simple path
@@ -592,6 +600,7 @@ std::vector<Eigen::Vector2i> Global_Planner::GetSimpleNeighbors(Eigen::Vector2i 
       Vector2i pot_neighbor = current + offset;
       bool is_known = evidence_grid_.is_known(pot_neighbor);
       bool is_wall = wall_grid_(pot_neighbor[0], pot_neighbor[1]) == 1 || ((wall_grid_(pot_neighbor[0], pot_neighbor[1]) == 2) && !in_padding);
+
       if (is_known && !is_wall) {
          neighbors.push_back(pot_neighbor);
       }

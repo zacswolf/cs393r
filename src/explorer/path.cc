@@ -97,10 +97,10 @@ float Path::rate_path_alt(const Vector2f& goal_point, float previous_curv) {
   float angle_to_goal = atan2(goal_point[1], goal_point[0]);
 
   if (this->clearance < FLAGS_min_clearance) {
-    clearance_cost = 1000 + 3./this->clearance;
+    clearance_cost = 1000 + 1./this->clearance;
   }
 
-  if (this->free_path_length < 2.) {
+  if (this->free_path_length < 0.5) {
     fpl_cost = 2000 + 1./this->free_path_length;
   }
 
