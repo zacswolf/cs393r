@@ -116,7 +116,7 @@ float Path::rate_path_alt(const Vector2f& goal_point, float previous_curv) {
 
   goal_cost = pow(this->curvature - 2 * angle_to_goal, 2); // range: -3.14 to 3.14
 
-  return fpl_cost + clearance_cost + goal_cost;
+  return fpl_cost + 0*clearance_cost + goal_cost;
 
 }
 

@@ -55,7 +55,7 @@ class EvidenceGrid {
 
     evidence_grid_ = Eigen::Matrix<float,-1,-1>::Constant(num_x, num_y, 0.5);
 
-    for (int x = -6; x <= 6; x++) {
+    for (int x = -10; x <= 0; x++) {
       for (int y = -6; y <= 6; y++) {
         evidence_grid_((num_x/2) + x, (num_y/2) + y) = 0.; //TODO: do bayesian update
       }

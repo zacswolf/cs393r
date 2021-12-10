@@ -242,7 +242,7 @@ void Global_Planner::ComplexAStar(Vector2i veh_loc, float veh_angle, Vector2i go
 
             // Penalize edge_cost if we have to go backwards
             if (is_backward) {
-               edge_cost *= 12;
+               edge_cost *= 64;
             }
 
             // Neighbors can be in wall padding if current is in wall padding
@@ -257,7 +257,7 @@ void Global_Planner::ComplexAStar(Vector2i veh_loc, float veh_angle, Vector2i go
                grid_[neighbor[2]](neighbor[0], neighbor[1]).cost = new_cost;
                
                // Note no longer optimal with the 1.1
-               float heuristic = 1.1 *(neighbor.segment(0,2) - goal_loc.segment(0,2)).cast<float>().norm(); // Euclidean distance
+               float heuristic = 1.0 *(neighbor.segment(0,2) - goal_loc.segment(0,2)).cast<float>().norm(); // Euclidean distance
                //float heuristic = abs(dist_to_goal[0]) + abs(dist_to_goal[1]); // Manhattan distance
                
                pri_queue.Push(neighbor, new_cost + heuristic);
