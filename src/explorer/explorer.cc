@@ -98,10 +98,13 @@ Explorer::Explorer(const string& map_file, ros::NodeHandle* n) :
     nav_goal_loc_(0, 0),
     nav_goal_angle_(0),
     vehicle_(FLAGS_max_acceleration, FLAGS_max_deceleration, FLAGS_max_speed, FLAGS_length, FLAGS_width, FLAGS_del_length, FLAGS_del_width, FLAGS_safety_margin),
-    global_planner_(),
-    slam_(),
     evidence_grid_(),
-    frontier_() {
+    global_planner_(evidence_grid_),
+    slam_(),
+    frontier_(),
+    frontier_update_ready_(true) {
+
+  //global_planner_.evidence_grid_ = &evidence_grid_;
 
   frontier_point_ = Eigen::Vector2f(0,0);
   printf("Start Explorer Init\n");
@@ -169,20 +172,26 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
   // SLAM
   vector<Vector2f> new_points;
   vector<Vector2f> new_open_points;
-  bool force_update = false;//(!frontier_.no_frontier_) && global_planner_.at_path_end_;
+  bool soft_update = (!frontier_.no_frontier_) && global_planner_.at_path_end_ && !slam_.last_pose_soft_;
   // global_planner_.at_path_end_ = false;
-  bool slam_update = slam_.ObservePointCloud(point_cloud_, cloud_open, new_points, new_open_points, force_update);
 
-  // TODO: update evidence grid
+  if (soft_update){
+    cout << "<Exp OPC> Soft Update==================\n";
+  }
+
+  
+  bool slam_update = slam_.ObservePointCloud(cloud, cloud_open, new_points, new_open_points, soft_update);
+  frontier_update_ready_ |= slam_update;
+  
   Vector2f robot_loc(0,0);
   float robot_angle = 0;
+  // works with soft updates
   slam_.GetPoseNoOdom(&robot_loc, &robot_angle);
 
   std::unordered_set<Vector2i, matrix_hash<Eigen::Vector2i>> new_walls;
-  evidence_grid_.UpdateEvidenceGrid(new_points, new_open_points, robot_loc, robot_angle, new_walls);
-  global_planner_.updateWallGrid(new_walls);
-  //global_planner_.AddWallsFromSLAM(new_points);
-
+  evidence_grid_.UpdateEvidenceGrid(new_points, new_open_points, robot_loc, robot_angle, new_walls, soft_update);
+  global_planner_.updateWallGrid(new_walls, soft_update);
+  
   //static int slam_update_counter = 4;
   if (slam_update) {
     std::cout << "SLAM Updated\n";
@@ -196,7 +205,8 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
   }
 
   static double t_glpath_last = 0; // for rate limit
-  if (GetMonotonicTime() - t_glpath_last > 5 && slam_.isInitialized()) {
+  bool timer_update = GetMonotonicTime() - t_glpath_last > 8;
+  if (slam_.isInitialized() && (soft_update || (timer_update && frontier_update_ready_))) {
   // if (slam_update) {
     t_glpath_last = GetMonotonicTime();
     //std::cout << "SLAM Updated\n";
@@ -206,31 +216,27 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
 
     frontier_point_ = frontier_.findFrontier(evidence_grid_, robot_loc_);
     std::cout << "Frontier Loc: " << frontier_point_.transpose() << "\n";
+    frontier_update_ready_ = soft_update;
     SetNavGoal(frontier_point_, 0);
   }
 
   // Vis slam map
-  static double t_last = 0; // for rate limit
-  if (GetMonotonicTime() - t_last > 2) {
+  static double t_last = 0.5; // for rate limit
+  if (GetMonotonicTime() - t_last > 1) {
     t_last = GetMonotonicTime();
     slam_viz_msg_.header.stamp = ros::Time::now();
     visualization::ClearVisualizationMsg(slam_viz_msg_);
 
     visualization::DrawCross(frontier_point_, 2., 0x000000, slam_viz_msg_);
 
-    // const vector<Vector2f> map = slam_.GetMap();
-    // for (const Vector2f& p : map) {
-    //   visualization::DrawPoint(p, 0xC0C0C0, slam_viz_msg_);
-    // }
-
-    // for (const Vector2f& p : new_open_points) {
-    //   visualization::DrawPoint(p, 0x00FF00, slam_viz_msg_);
-    // }
-
     // Plot global map
     evidence_grid_.PlotEvidenceVis(slam_viz_msg_);
     //global_planner_.PlotWallVis(slam_viz_msg_);
     evidence_grid_.PlotNeighborsVis(frontier_point_, slam_viz_msg_);
+
+    // Plot global Path
+    global_planner_.PlotGlobalPathVis(slam_viz_msg_);
+
 
     viz_pub_.publish(slam_viz_msg_);
   }
@@ -279,7 +285,6 @@ void Explorer::Run() {
     is_backward = loc_nav_goal[2];
     
 
-    global_planner_.PlotGlobalPathVis(global_viz_msg_);
     global_planner_.PlotLocalPathVis(local_viz_msg_);
   }
 
@@ -347,11 +352,20 @@ void Explorer::Run() {
 
   best_path.visualize(local_viz_msg_);
 
-  drive_msg_.curvature = best_path.curvature;
+  
 
   // TOC
   drive_msg_.velocity = vehicle_.timeOptimalController(vel_pred, 1./FLAGS_update_rate, best_path.free_path_length, goal_point_pred, is_backward);
 
+  drive_msg_.curvature = best_path.curvature;
+  
+  // Negate curvature if velocity is in the wrong direction
+  if (drive_msg_.velocity > 0 && is_backward){
+    drive_msg_.curvature = -drive_msg_.curvature;
+  } else if (drive_msg_.velocity < 0 && !is_backward){
+    drive_msg_.curvature = -drive_msg_.curvature;
+  }
+  
 
   // Shift previous values, for forward predict
   for(int i = COMMAND_MEMORY_LENGTH-2; i >= 0; i--){

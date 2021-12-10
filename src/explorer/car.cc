@@ -188,7 +188,7 @@ float Car::timeOptimalController(float vel, float update_period, float free_path
   float goal_dist = goal_point.norm();
 
 
-  if (goal_dist < .1) {
+  if (goal_dist < .01) {
     goal_dist = 0;
   }
   

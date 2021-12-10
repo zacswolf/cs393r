@@ -104,9 +104,9 @@ float Path::rate_path_alt(const Vector2f& goal_point, float previous_curv) {
     fpl_cost = 2000 + 1./this->free_path_length;
   }
 
-  if (goal_point.norm() < this->free_path_length) {
-    fpl_cost = 0;
-  }
+  // if (goal_point.norm() < this->free_path_length) {
+  //   fpl_cost = 0;
+  // }
 
   if (is_backwards) {
     clearance_cost = 0;

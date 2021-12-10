@@ -26,6 +26,7 @@ class Frontier {
     
     
     Vector2f findFrontier(EvidenceGrid evidence_grid, Vector2f robot_loc) {//, amrl_msgs::VisualizationMsg& vis_msg) {
+        std::cout << "<Frontier finder> Starting\n";
 
         Vector2i grid_loc = evidence_grid.pointToGrid(robot_loc);
 
@@ -110,6 +111,7 @@ class Frontier {
                                 std::cout << "<Frontier finder> Found frontier point but from a non open point\n";
                             }
                             // visualization::DrawCross(pt, 0.1, 0x0000FF, vis_msg);
+                            std::cout << "<Frontier finder> Finished\n";
                             return evidence_grid.gridToPoint(current);
                         } else {
                             // Wall

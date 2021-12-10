@@ -111,6 +111,11 @@ class SLAM {
   // Ordered collection of previous poses, relative to the first pose
   std::vector<Pose> prev_poses_;
 
+ public:
+  bool last_pose_soft_;
+ private:
+  Pose soft_pose_;
+
 };
 }  // namespace slam
 

@@ -62,18 +62,16 @@ class EvidenceGrid {
     }
   }
 
-  void UpdateEvidenceGrid(std::vector<Eigen::Vector2f> new_points, std::vector<Eigen::Vector2f> new_points_open, Eigen::Vector2f robot_loc, float robot_angle, std::unordered_set<Vector2i, matrix_hash<Eigen::Vector2i>> &new_walls) {
-    //Eigen::Vector2i grid_robot_loc = pointToGrid(robot_loc);
-    Eigen::Vector2i grid_robot_loc = pointToGrid(Eigen::Vector2f(0,0));
-    int x0 = grid_robot_loc[0];
-    int y0 = grid_robot_loc[1];
+  void UpdateEvidenceGrid(std::vector<Eigen::Vector2f> new_points, std::vector<Eigen::Vector2f> new_points_open, Eigen::Vector2f robot_loc, float robot_angle, std::unordered_set<Vector2i, matrix_hash<Eigen::Vector2i>> &new_walls, bool soft_update) {
+    Eigen::Vector2i grid_robot_loc = pointToGrid(robot_loc);
+    //Eigen::Vector2i grid_robot_loc = pointToGrid(Eigen::Vector2f(0,0));
     
     for (Vector2f& point : new_points) {
-      plotLine(x0, y0, point, false, new_walls);
+      plotLine(grid_robot_loc, point, false, new_walls);
     }
 
     for (Vector2f& point : new_points_open) {
-      plotLine(x0, y0, point, true, new_walls);
+      plotLine(grid_robot_loc, point, true, new_walls);
     }
   }
 
@@ -124,6 +122,9 @@ class EvidenceGrid {
 
     }
 
+  bool is_known(Vector2i loc) {
+    return evidence_grid_(loc[0], loc[1]) < 0.5;
+  }
 
  private:
 
@@ -187,7 +188,10 @@ class EvidenceGrid {
     }
   }
   
-  void plotLine(int x0, int y0, Vector2f point, bool isOpen, std::unordered_set<Vector2i, matrix_hash<Eigen::Vector2i>> &new_walls) {
+  void plotLine(Vector2i grid_robot_loc, Vector2f point, bool isOpen, std::unordered_set<Vector2i, matrix_hash<Eigen::Vector2i>> &new_walls) {
+    int x0 = grid_robot_loc[0];
+    int y0 = grid_robot_loc[1];
+    
     Eigen::Vector2i grid_pt_loc = pointToGrid(point);
 
     int x1 = grid_pt_loc[0];

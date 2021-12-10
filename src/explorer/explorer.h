@@ -116,6 +116,10 @@ class Explorer {
   // Vehicle object
   Car vehicle_;
 
+ public:
+  // Evidence grid
+  EvidenceGrid evidence_grid_;
+ private:
   // Global planner
   Global_Planner global_planner_;
 
@@ -125,9 +129,10 @@ class Explorer {
   // SLAM
   slam::SLAM slam_;
 
-  // Evidence grid
-  EvidenceGrid evidence_grid_;
+  // Frontier finder
   Frontier frontier_;
+ private:
+  bool frontier_update_ready_;
 };
 
 }  // namespace explorer
