@@ -210,13 +210,6 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
   if (slam_update) {
     std::cout << "SLAM Updated\n";
     slam_update_timer = GetMonotonicTime();
-    // slam_update_counter++;
-    // if (slam_update_counter >= 4) {
-    //   slam_update_counter = 0;
-    //   frontier_point_ = frontier_.findFrontier(evidence_grid_, robot_loc_);
-    //   std::cout << "Frontier Loc: " << frontier_point_.transpose() << "\n";
-    //   SetNavGoal(frontier_point_, 0);
-    // }
   }
 
   bool timer_update = GetMonotonicTime() - t_glpath_last > 8;
