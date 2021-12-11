@@ -52,7 +52,6 @@ using namespace math_util;
 using namespace ros_helpers;
 
 // Create command line arguments
-DEFINE_double(p1_local_coords, 400., "The goal for P1");
 DEFINE_int32(path_sample_algo, 0, "Choose which path sampling algo to use");
 
 // Forward Predict
@@ -71,6 +70,14 @@ DEFINE_double(del_length, .088075, "The length margin of the robot");
 DEFINE_double(del_width, .0254, "The width margin of the robot");
 DEFINE_double(safety_margin, .0, "The safety margin for the robot");
 DEFINE_int32(run_counter, 40, "Initialization routine");
+
+// Grid
+DEFINE_double(raster_pixel_size, 0.1, "Distance between pixels in the raster");
+DEFINE_int32(raster_x_min, -60, "Raster x min");
+DEFINE_int32(raster_x_max, 60, "Raster x max");
+DEFINE_int32(raster_y_min, -60, "Raster y min");
+DEFINE_int32(raster_y_max, 60, "Raster y max");
+
 
 
 namespace {
@@ -99,8 +106,8 @@ Explorer::Explorer(const string& map_file, ros::NodeHandle* n) :
     nav_goal_loc_(0, 0),
     nav_goal_angle_(0),
     vehicle_(FLAGS_max_acceleration, FLAGS_max_deceleration, FLAGS_max_speed, FLAGS_length, FLAGS_width, FLAGS_del_length, FLAGS_del_width, FLAGS_safety_margin),
-    evidence_grid_(),
-    global_planner_(evidence_grid_),
+    evidence_grid_((float)FLAGS_raster_pixel_size, FLAGS_raster_x_min, FLAGS_raster_x_max, FLAGS_raster_y_min, FLAGS_raster_y_max),
+    global_planner_(evidence_grid_, (float)FLAGS_raster_pixel_size, FLAGS_raster_x_min, FLAGS_raster_x_max, FLAGS_raster_y_min, FLAGS_raster_y_max),
     slam_(),
     frontier_(),
     frontier_update_ready_(true),
@@ -195,8 +202,9 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
   slam_.GetPoseNoOdom(&robot_loc, &robot_angle);
 
   std::unordered_set<Vector2i, matrix_hash<Eigen::Vector2i>> new_walls;
-  evidence_grid_.UpdateEvidenceGrid(new_points, new_open_points, robot_loc, robot_angle, new_walls, soft_update);
-  global_planner_.updateWallGrid(new_walls, soft_update);
+  std::unordered_set<Vector2i, matrix_hash<Eigen::Vector2i>> deleted_walls;
+  evidence_grid_.updateEvidenceGrid(new_points, new_open_points, robot_loc, robot_angle, new_walls, deleted_walls, soft_update);
+  global_planner_.updateWallGrid(new_walls, deleted_walls, soft_update);
   
   static int slam_update_timer = 0;
   if (slam_update) {
@@ -211,13 +219,9 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
     // }
   }
 
-  bool timer_update = GetMonotonicTime() - t_glpath_last > 8;
-  bool slam_timer_update = GetMonotonicTime() - slam_update_timer > 12;
+  bool timer_update = GetMonotonicTime() - t_glpath_last > 5;
+  bool slam_timer_update = GetMonotonicTime() - slam_update_timer > 10;
   if (slam_.isInitialized() && (soft_update || (timer_update && frontier_update_ready_) || slam_timer_update)) {
-  // if (slam_update) {
-    t_glpath_last = GetMonotonicTime();
-    slam_update_timer = GetMonotonicTime();
-    //std::cout << "SLAM Updated\n";
     // Go to a new frontier
     // Step 1: Find frontier point
     // Step 2: Set frontier point as new global
@@ -226,6 +230,8 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
     std::cout << "Frontier Loc: " << frontier_point_.transpose() << "\n";
     frontier_update_ready_ = soft_update;
     SetNavGoal(frontier_point_, 0);
+    t_glpath_last = GetMonotonicTime();
+    slam_update_timer = GetMonotonicTime();
   }
 
   // Vis slam map
@@ -239,7 +245,7 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
 
     // Plot global map
     evidence_grid_.PlotEvidenceVis(slam_viz_msg_);
-    //global_planner_.PlotWallVis(slam_viz_msg_);
+    // global_planner_.PlotWallVis(slam_viz_msg_);
     evidence_grid_.PlotNeighborsVis(frontier_point_, slam_viz_msg_);
 
     // Plot global Path
@@ -272,16 +278,10 @@ void Explorer::Run() {
 
   // If odometry has not been initialized, we can't do anything.
   if (!odom_initialized_) return;
+  // if (!slam_.isInitialized()) return;
 
   vehicle_.drawBoundingBox(local_viz_msg_);
 
-  // Draw goal point p1, relative to car
-  // const Vector2f goal_point = Vector2f(FLAGS_p1_local_coords - (odom_start_loc_ - odom_loc_).norm(), 0.);
-  
-  // Eigen::Rotation2Df r_goal(-robot_angle_);
-  // // In robot frame
-  // const Vector2f goal_point = r_goal * (nav_goal_loc_ - robot_loc_);
-  // visualization::DrawCross(goal_point, .5, 0x39B81D, local_viz_msg_);
   Vector2f goal_point = Vector2f(0,0);
   bool is_backward = false;
 

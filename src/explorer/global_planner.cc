@@ -14,55 +14,50 @@ using geometry::line2f;
 
 
 // HARD CODED IN EVIDENCE GRID TODO: FIX
-DEFINE_double(raster_pixel_size, 0.1, "Distance between pixels in the raster");
+// DEFINE_double(raster_pixel_size, 0.1, "Distance between pixels in the raster");
 
 DEFINE_int32(num_angles, 8, "Number of angles to use");
 
 // Constuctor
-Global_Planner::Global_Planner(EvidenceGrid& evidence_grid): at_path_end_(false), path_algo_(PathAlgo::Mixed), evidence_grid_(evidence_grid) {
+Global_Planner::Global_Planner(EvidenceGrid& evidence_grid, float raster_pixel_size, int x_min, int x_max, int y_min, int y_max) : 
+   at_path_end_(false), raster_pixel_size(raster_pixel_size), x_min(x_min), x_max(x_max), y_min(y_min), y_max(y_max), 
+   num_x((x_max - x_min) / raster_pixel_size), num_y((y_max - y_min) / raster_pixel_size), 
+   path_algo_(PathAlgo::Mixed), evidence_grid_(evidence_grid) {
+   
    this->is_ready_ = false;
 
    // Turn Map into grid
-   grid_ = std::vector<Eigen::Matrix<GridPt,-1,-1>>(FLAGS_num_angles);
-   
-   x_min = -60;
-   x_max = 60;
-   
-   y_min = -60;
-   y_max = 60;
-
-   num_x = (x_max - x_min) / FLAGS_raster_pixel_size;
-   num_y = (y_max - y_min) / FLAGS_raster_pixel_size;
+   grid_ = vector<Eigen::Matrix<GridPt,-1,-1>>(FLAGS_num_angles);
 
    simple_grid_ = Eigen::Matrix<GridPtSimple,-1,-1>::Constant(num_x, num_y, GridPtSimple{});
    fill(grid_.begin(), grid_.end(), Eigen::Matrix<GridPt,-1,-1>::Constant(num_x, num_y, GridPt{}));
-   wall_grid_ = Eigen::Matrix<int,-1,-1>::Constant(num_x, num_y, 0);
+   wall_grid_ = Eigen::Matrix<WallStruct,-1,-1>::Constant(num_x, num_y, WallStruct{false,0});
    std::cout << "Map created\n";
 
-   global_path_ = std::vector<Eigen::Vector3f>();
-   simple_global_path_ = std::vector<Eigen::Vector2f>();
+   global_path_ = vector<Vector3f>();
+   simple_global_path_ = vector<Vector2f>();
 }
 
 // Sets the global navigation goal at the provided global coordinates
-void Global_Planner::SetGlobalNavGoal(Eigen::Vector2f loc) {
+void Global_Planner::SetGlobalNavGoal(Vector2f loc) {
    global_nav_goal_ = loc;
    this->is_ready_ = true;
 }
 
 // Returns the local coordinates of the intermediate goal along the global path
-Eigen::Vector3f Global_Planner::GetLocalNavGoal(Vector2f veh_loc, float veh_angle) {
+Vector3f Global_Planner::GetLocalNavGoal(Vector2f veh_loc, float veh_angle) {
 
 
-   Eigen::Vector3f local_goal;
+   Vector3f local_goal;
 
    if (global_path_.size() == 0) {
       std::cout << "<GP local> Error Global path is empty\n";
-      return Eigen::Vector3f(0.,0.,0.);
+      return Vector3f(0.,0.,0.);
    }
 
    // If at the end, move forward
    if (path_index_ == (int)global_path_.size() - 1) {
-      return Eigen::Vector3f(1.,0.,0.);
+      return Vector3f(1.,0.,0.);
    }
 
    UpdatePathIndex(veh_loc, veh_angle);
@@ -112,9 +107,9 @@ Eigen::Vector3f Global_Planner::GetLocalNavGoal(Vector2f veh_loc, float veh_angl
 
 void Global_Planner::SimpleAStar(Vector2i veh_loc, Vector2i goal_loc) {
 
-   SimpleQueue<Eigen::Vector2i, float> pri_queue;
+   SimpleQueue<Vector2i, float> pri_queue;
 
-   const Eigen::Vector2i start = veh_loc;
+   const Vector2i start = veh_loc;
    
    pri_queue.Push(start, 0); // Push initial location
 
@@ -128,7 +123,7 @@ void Global_Planner::SimpleAStar(Vector2i veh_loc, Vector2i goal_loc) {
 
    // Begin A*
    std::cout << "<GP A*> Beginning Simple A*\n";
-   Eigen::Vector2i current;
+   Vector2i current;
    bool found_path = false;
    while (!pri_queue.Empty()) {
       current = pri_queue.Pop();
@@ -138,13 +133,13 @@ void Global_Planner::SimpleAStar(Vector2i veh_loc, Vector2i goal_loc) {
          found_path = true;
          break;
       } else {
-         std::vector<Vector2i> neighbors = GetSimpleNeighbors(current);
-         for (const Eigen::Vector2i& neighbor : neighbors) {
+         vector<Vector2i> neighbors = GetSimpleNeighbors(current);
+         for (const Vector2i& neighbor : neighbors) {
             float edge_cost = (neighbor - current).cast<float>().norm();
 
             // Neighbors can be in wall padding if current is in wall padding
             // We want to penalize moving within wall padding so we add 10 map pixels to the edge cost
-            bool neighbor_in_padding = (wall_grid_(neighbor[0], neighbor[1]) == 2);
+            bool neighbor_in_padding = !wall_grid_(neighbor[0], neighbor[1]).is_wall && (wall_grid_(neighbor[0], neighbor[1]).padding_counter > 0);
             if (neighbor_in_padding) {
                edge_cost *= 1024;
             }
@@ -172,13 +167,13 @@ void Global_Planner::SimpleAStar(Vector2i veh_loc, Vector2i goal_loc) {
    // Store solution (convert unordered map to vector)
    simple_global_path_.clear();
 
-   Eigen::Vector2f path_point = gridToPoint(current);
+   Vector2f path_point = gridToPoint(current);
    simple_global_path_.push_back(path_point);
 
    if (current != start) { //TODO: remove
 
-      Eigen::Vector2i loc = current;
-      Eigen::Vector2i parent_loc = simple_grid_(loc[0], loc[1]).parent;
+      Vector2i loc = current;
+      Vector2i parent_loc = simple_grid_(loc[0], loc[1]).parent;
 
       bool done = false;
       while (!done) {
@@ -230,10 +225,20 @@ void Global_Planner::ComplexAStar(Vector2i veh_loc, float veh_angle, Vector2i go
    Eigen::Vector4i current;
    while (!pri_queue.Empty()) {
       current = pri_queue.Pop();
-      Vector2f rel_to_goal = current.cast<float>().segment(0,2) - goal_loc.cast<float>().segment(0,2);
-      if (rel_to_goal.norm() < NUM_PIXELS_GOAL) {
+      Vector2f rel_to_goal = goal_loc.cast<float>().segment(0,2) - current.cast<float>().segment(0,2);
+      float ang_to_goal = atan2(rel_to_goal[1], rel_to_goal[0]);
+      int rounded_goal_angle_ind = ((int) round(math_util::AngleMod(ang_to_goal) * FLAGS_num_angles / (2 * M_PI)) );
+      int ang_diff = (((current[2] - rounded_goal_angle_ind + 4) % 8 + 8) % 8) - 4;
+      
+      bool near_goal = rel_to_goal.norm() < NUM_PIXELS_GOAL;
+
+      bool valid_facing = abs(ang_diff) <= 1;
+
+      if (near_goal && valid_facing) {
          //std::cout << rel_to_goal.norm() << "\n";
          break;
+      } else if (near_goal && !valid_facing) {
+         continue;
       } else {
          vector<Eigen::Vector4i> neighbors = GetComplexNeighbors(current);
          for (Eigen::Vector4i& neighbor : neighbors) {
@@ -247,7 +252,7 @@ void Global_Planner::ComplexAStar(Vector2i veh_loc, float veh_angle, Vector2i go
 
             // Neighbors can be in wall padding if current is in wall padding
             // We want to penalize moving within wall padding so we add 10 map pixels to the edge cost
-            bool neighbor_in_padding = (wall_grid_(neighbor[0], neighbor[1]) == 2);
+            bool neighbor_in_padding = !wall_grid_(neighbor[0], neighbor[1]).is_wall && wall_grid_(neighbor[0], neighbor[1]).padding_counter > 0;
             if (neighbor_in_padding){
                edge_cost *= 1024;
             }
@@ -272,8 +277,8 @@ void Global_Planner::ComplexAStar(Vector2i veh_loc, float veh_angle, Vector2i go
    // Store solution (convert unordered map to vector)
    global_path_.clear();
    
-   Eigen::Vector2f path_point = gridToPoint(current.segment(0,2));
-   global_path_.push_back(Eigen::Vector3f(path_point[0], path_point[1], current[3]));
+   Vector2f path_point = gridToPoint(current.segment(0,2));
+   global_path_.push_back(Vector3f(path_point[0], path_point[1], current[3]));
 
    if (current != start) { //TODO: remove
 
@@ -334,8 +339,8 @@ void Global_Planner::ComplexAStar(Vector2i veh_loc, float veh_angle, Vector2i go
 // Computes the global path from the vehicle's pose to the global nav goal
 void Global_Planner::ComputeGlobalPath(Vector2f veh_point, float veh_angle) {
 
-   Eigen::Vector2i goal_loc = pointToGrid(global_nav_goal_);
-   Eigen::Vector2i veh_loc = pointToGrid(veh_point);
+   Vector2i goal_loc = pointToGrid(global_nav_goal_);
+   Vector2i veh_loc = pointToGrid(veh_point);
    
    this->path_index_ = 0;
 
@@ -350,7 +355,7 @@ void Global_Planner::ComputeGlobalPath(Vector2f veh_point, float veh_angle) {
       ComplexAStar(veh_loc, veh_angle, simple_goal_loc);
 
       // Remove beginning of simple path
-      simple_global_path_ = std::vector<Vector2f>(simple_global_path_.begin() + look_ahead - 1, simple_global_path_.end());
+      simple_global_path_ = vector<Vector2f>(simple_global_path_.begin() + look_ahead - 1, simple_global_path_.end());
 
    } else if (path_algo_ == PathAlgo::Complex) {
       // Compute lattice planned A* path
@@ -394,15 +399,20 @@ void Global_Planner::CheckPathValid(Vector2f veh_loc, float veh_angle) {
 
 // Plots the global path plan to the provided visualization message
 void Global_Planner::PlotWallVis(amrl_msgs::VisualizationMsg& vis_msg) {
-   //const int num_x = (x_max - x_min) / FLAGS_raster_pixel_size;
-   //const int num_y = (y_max - y_min) / FLAGS_raster_pixel_size;
+   //const int num_x = (x_max - x_min) / raster_pixel_size;
+   //const int num_y = (y_max - y_min) / raster_pixel_size;
    for (int x = 0; x < num_x; x++) {
       for (int y = 0; y < num_y; y++) {
-         bool is_wall = wall_grid_(x, y) == 2;
-         if (is_wall) {
-            // Plot wall
-            Eigen::Vector2f pt = gridToPoint(Eigen::Vector2i(x,y));
-            visualization::DrawCross(pt, 0.1, 0x000000, vis_msg);
+         // bool is_wall = wall_grid_(x, y).is_wall;
+         bool is_padding = !wall_grid_(x, y).is_wall && (wall_grid_(x, y).padding_counter > 0);
+         // if (is_wall) {
+         //    // Plot wall
+         //    Vector2f pt = gridToPoint(Vector2i(x,y));
+         //    visualization::DrawCross(pt, 0.1, 0x000000, vis_msg);
+         // } else 
+         if (is_padding) {
+            Vector2f pt = gridToPoint(Vector2i(x,y));
+            visualization::DrawCross(pt, 0.1, 0x739546, vis_msg);
          }
       }
    }
@@ -413,12 +423,12 @@ void Global_Planner::PlotWallVis(amrl_msgs::VisualizationMsg& vis_msg) {
 void Global_Planner::PlotGlobalPathVis(amrl_msgs::VisualizationMsg& vis_msg) {
 
    // Plot simple path
-   for (Eigen::Vector2f pt : simple_global_path_) {
+   for (Vector2f pt : simple_global_path_) {
       visualization::DrawCross(pt, 0.05, 0xAAAAAA, vis_msg);
    }
 
    // Plot complex path
-   for (Eigen::Vector3f pt : global_path_) {
+   for (Vector3f pt : global_path_) {
       if (pt[2]) {
          visualization::DrawCross(pt.segment(0,2), 0.05, 0xAA0000, vis_msg);
       } else {
@@ -433,18 +443,18 @@ void Global_Planner::PlotLocalPathVis(amrl_msgs::VisualizationMsg& vis_msg) {
    visualization::DrawCross(local_nav_goal_.segment(0,2), .5, 0x39B81D, vis_msg);
 }
 
-Eigen::Vector2i Global_Planner::pointToGrid(Eigen::Vector2f pt) {
-   Eigen::Vector2f temp_pt = ((pt-Vector2f(x_min, y_min)).array() / FLAGS_raster_pixel_size).round();
-   Eigen::Vector2i cast_pt = temp_pt.cast <int> ();
+Vector2i Global_Planner::pointToGrid(Vector2f pt) {
+   Vector2f temp_pt = ((pt-Vector2f(x_min, y_min)).array() / raster_pixel_size).round();
+   Vector2i cast_pt = temp_pt.cast <int> ();
    return cast_pt;
 }
 
-Eigen::Vector2f Global_Planner::gridToPoint(Eigen::Vector2i grid_pt) {
-   Eigen::Vector2f cast_grid_pt = grid_pt.cast <float> ();
-   return cast_grid_pt * FLAGS_raster_pixel_size + Eigen::Vector2f(x_min, y_min);
+Vector2f Global_Planner::gridToPoint(Vector2i grid_pt) {
+   Vector2f cast_grid_pt = grid_pt.cast <float> ();
+   return cast_grid_pt * raster_pixel_size + Vector2f(x_min, y_min);
 }
 
-std::vector<Eigen::Vector4i> Global_Planner::GetComplexNeighbors(Eigen::Vector4i current) {
+vector<Eigen::Vector4i> Global_Planner::GetComplexNeighbors(Eigen::Vector4i current) {
    vector<Eigen::Vector4i> neighbors = vector<Eigen::Vector4i>();
    
    int current_ang = current[2];
@@ -527,7 +537,7 @@ std::vector<Eigen::Vector4i> Global_Planner::GetComplexNeighbors(Eigen::Vector4i
 
    // std::cout << "current loc is wall " << wall_grid_(current[0], current[1]) << std::endl;
 
-   bool in_padding = (wall_grid_(current[0], current[1]) == 2);
+   bool in_padding = !wall_grid_(current[0], current[1]).is_wall && (wall_grid_(current[0], current[1]).padding_counter > 0);
 
    for (const Eigen::Vector4i& offset : pot_offsets[current_ang]){
 
@@ -548,13 +558,9 @@ std::vector<Eigen::Vector4i> Global_Planner::GetComplexNeighbors(Eigen::Vector4i
 
             Vector2i interp = current.segment(0,2) + Vector2i(x,y);
             bool is_known = evidence_grid_.is_known(interp);
-            bool is_wall = (wall_grid_(interp[0], interp[1]) == 1) || ((wall_grid_(interp[0], interp[1]) == 2) && !in_padding);
-
-            is_valid_neighbor &= (is_known && !is_wall);
-
-            // if ((wall_grid_(interp) == 1) || ((wall_grid_(interp) == 2) && !in_padding)) { 
-            //    is_valid_neighbor = false;
-            // }
+            bool is_wall = wall_grid_(interp[0], interp[1]).is_wall;
+            bool is_illegal_padding = !in_padding && (!wall_grid_(interp[0], interp[1]).is_wall && (wall_grid_(interp[0], interp[1]).padding_counter > 0));
+            is_valid_neighbor &= (is_known && !is_wall && !is_illegal_padding);
          }
       } else {
          int incr = (offset[1] >= 0) - (offset[1] < 0);
@@ -565,9 +571,9 @@ std::vector<Eigen::Vector4i> Global_Planner::GetComplexNeighbors(Eigen::Vector4i
 
             Vector2i interp = current.segment(0,2) + Vector2i(x,y);
             bool is_known = evidence_grid_.is_known(interp);
-            bool is_wall = (wall_grid_(interp[0], interp[1]) == 1) || ((wall_grid_(interp[0], interp[1]) == 2) && !in_padding);
-
-            is_valid_neighbor &= (is_known && !is_wall);
+            bool is_wall = wall_grid_(interp[0], interp[1]).is_wall;
+            bool is_illegal_padding = !in_padding && (!wall_grid_(interp[0], interp[1]).is_wall && (wall_grid_(interp[0], interp[1]).padding_counter > 0));
+            is_valid_neighbor &= (is_known && !is_wall && !is_illegal_padding);
          }
       }
 
@@ -579,11 +585,11 @@ std::vector<Eigen::Vector4i> Global_Planner::GetComplexNeighbors(Eigen::Vector4i
    return neighbors;
 }
 
-std::vector<Eigen::Vector2i> Global_Planner::GetSimpleNeighbors(Eigen::Vector2i current) {
-   vector<Eigen::Vector2i> neighbors = vector<Eigen::Vector2i>();
+vector<Vector2i> Global_Planner::GetSimpleNeighbors(Vector2i current) {
+   vector<Vector2i> neighbors = vector<Vector2i>();
 
    // (x, y)
-   static const Eigen::Vector2i pot_offsets[] = {
+   static const Vector2i pot_offsets[] = {
       Vector2i(-1,0),
       Vector2i(1,0),
       Vector2i(0,-1),
@@ -594,14 +600,15 @@ std::vector<Eigen::Vector2i> Global_Planner::GetSimpleNeighbors(Eigen::Vector2i 
       Vector2i(1,1)
    };
 
-   bool in_padding = (wall_grid_(current[0], current[1]) == 2);
+   bool in_padding = !wall_grid_(current[0], current[1]).is_wall && (wall_grid_(current[0], current[1]).padding_counter > 0);
 
-   for (const Eigen::Vector2i& offset : pot_offsets) {
+   for (const Vector2i& offset : pot_offsets) {
       Vector2i pot_neighbor = current + offset;
       bool is_known = evidence_grid_.is_known(pot_neighbor);
-      bool is_wall = wall_grid_(pot_neighbor[0], pot_neighbor[1]) == 1 || ((wall_grid_(pot_neighbor[0], pot_neighbor[1]) == 2) && !in_padding);
+      bool is_wall = wall_grid_(pot_neighbor[0], pot_neighbor[1]).is_wall;
+      bool is_illegal_padding = !in_padding && (!wall_grid_(pot_neighbor[0], pot_neighbor[1]).is_wall && (wall_grid_(pot_neighbor[0], pot_neighbor[1]).padding_counter > 0));
 
-      if (is_known && !is_wall) {
+      if (is_known && !is_wall && !is_illegal_padding) {
          neighbors.push_back(pot_neighbor);
       }
    }
@@ -612,107 +619,89 @@ std::vector<Eigen::Vector2i> Global_Planner::GetSimpleNeighbors(Eigen::Vector2i 
 
 
 bool Global_Planner::IsReady() {
-   return this->is_ready_;
+   return is_ready_;
 }
 
-void Global_Planner::AddWallsFromSLAM(std::vector<Eigen::Vector2f> point_cloud) {
-   const static Eigen::Vector2i offsets[] = {
-      Eigen::Vector2i(-1, -1),
-      Eigen::Vector2i(-1, 0),
-      Eigen::Vector2i(-1, 1),
-      Eigen::Vector2i(1, -1),
-      Eigen::Vector2i(1, 0),
-      Eigen::Vector2i(1, 1),
-      Eigen::Vector2i(0, -1),
-      Eigen::Vector2i(0, 0),
-      Eigen::Vector2i(0, 1),
-      Eigen::Vector2i(0, -2),
-      Eigen::Vector2i(0, 2),
-      Eigen::Vector2i(-2, 0),
-      Eigen::Vector2i(2, 0),
-      Eigen::Vector2i(-3, 0),
-      Eigen::Vector2i(-2, 1),
-      Eigen::Vector2i(-1, 2),
-      Eigen::Vector2i(0, 3),
-      Eigen::Vector2i(1, 2),
-      Eigen::Vector2i(2, 1),
-      Eigen::Vector2i(3, 0),
-      Eigen::Vector2i(-2, -1),
-      Eigen::Vector2i(-1, -2),
-      Eigen::Vector2i(0, -3),
-      Eigen::Vector2i(1, -2),
-      Eigen::Vector2i(2, -1),
-   };
-
-   for (Eigen::Vector2f& point : point_cloud) {
-      Eigen::Vector2i wall_index = pointToGrid(point);
-   
-      for (Eigen::Vector2i offset : offsets){
-         Eigen::Vector2i offset_pt = offset + wall_index;
-         if (offset_pt[0] >= 0 && offset_pt[0] < num_x && offset_pt[1] >= 0 && offset_pt[1] < num_y) {
-            wall_grid_(offset_pt[0], offset_pt[1]) = 1;
-         }
-      }
-   }
-   
-}
-
-// void updateWallGrid(Eigen::Matrix<float, -1, -1> &evidence_grid) {
-//    wall_grid_ = (evidence_grid.array() >= 0.5);
-// }
-
-void Global_Planner::updateWallGrid(std::unordered_set<Eigen::Vector2i, matrix_hash<Eigen::Vector2i>> new_walls, bool soft_update) {
+void Global_Planner::updateWallGrid(std::unordered_set<Vector2i, matrix_hash<Vector2i>> new_walls, std::unordered_set<Vector2i, matrix_hash<Vector2i>> deleted_walls, bool soft_update) {
    // Note: this will go through unknown space
    // Proposed solution: maintain a frontier matrix and when checking for is wall look at both frontier mat and wall_grid
    
    // Other solution: everything starts as a wall, pass in the "free" grid spaces that you want to make not walls,
    // then you check the offsets around each point to see if they're a wall (in the evidence grid) or not, if not then make it open
    
-   const static Eigen::Vector2i offsets[] = {
-      Eigen::Vector2i(-1, -1),
-      Eigen::Vector2i(-1, 0),
-      Eigen::Vector2i(-1, 1),
-      Eigen::Vector2i(1, -1),
-      Eigen::Vector2i(1, 0),
-      Eigen::Vector2i(1, 1),
-      Eigen::Vector2i(0, -1),
-      Eigen::Vector2i(0, 1),
-      Eigen::Vector2i(0, -2),
-      Eigen::Vector2i(0, 2),
-      Eigen::Vector2i(-2, 0),
-      Eigen::Vector2i(2, 0),
-      //Eigen::Vector2i(-3, 0),
-      Eigen::Vector2i(-2, 1),
-      Eigen::Vector2i(-1, 2),
-      //Eigen::Vector2i(0, 3),
-      Eigen::Vector2i(1, 2),
-      Eigen::Vector2i(2, 1),
-      //Eigen::Vector2i(3, 0),
-      Eigen::Vector2i(-2, -1),
-      Eigen::Vector2i(-1, -2),
-      //Eigen::Vector2i(0, -3),
-      Eigen::Vector2i(1, -2),
-      Eigen::Vector2i(2, -1),
+   const static Vector2i offsets[] = {
+      Vector2i(-1, -1),
+      Vector2i(-1, 0),
+      Vector2i(-1, 1),
+      Vector2i(1, -1),
+      Vector2i(1, 0),
+      Vector2i(1, 1),
+      Vector2i(0, -1),
+      Vector2i(0, 1),
+      Vector2i(0, -2),
+      Vector2i(0, 2),
+      Vector2i(-2, 0),
+      Vector2i(2, 0),
+      //Vector2i(-3, 0),
+      Vector2i(-2, 1),
+      Vector2i(-1, 2),
+      //Vector2i(0, 3),
+      Vector2i(1, 2),
+      Vector2i(2, 1),
+      //Vector2i(3, 0),
+      Vector2i(-2, -1),
+      Vector2i(-1, -2),
+      //Vector2i(0, -3),
+      Vector2i(1, -2),
+      Vector2i(2, -1),
    };
 
+   // Don't delete walls in both new_walls and deleted_walls, setdiff
+   // Filter deleted_walls and new_walls
+   for (const Vector2i& elem : new_walls) {
+      deleted_walls.erase(elem);
+   }
 
-   for (Eigen::Vector2i new_wall : new_walls) {
+   // Delete walls
+   for (const Vector2i& deleted_wall : deleted_walls) {
 
-      if (new_wall[0] >= 0 && new_wall[0] < num_x && new_wall[1] >= 0 && new_wall[1] < num_y) {
-         wall_grid_(new_wall[0], new_wall[1]) = 1;
-      }
+      if (deleted_wall[0] >= 0 && deleted_wall[0] < num_x && deleted_wall[1] >= 0 && deleted_wall[1] < num_y) {
+         bool is_wall = wall_grid_(deleted_wall[0], deleted_wall[1]).is_wall;
+         if (is_wall) {
 
-      for (Eigen::Vector2i offset : offsets){
-         Eigen::Vector2i offset_pt = offset + new_wall;
-         if (offset_pt[0] >= 0 && offset_pt[0] < num_x && offset_pt[1] >= 0 && offset_pt[1] < num_y) {
-            if (wall_grid_(offset_pt[0], offset_pt[1]) != 1) {
-               wall_grid_(offset_pt[0], offset_pt[1]) = 2;  
+            wall_grid_(deleted_wall[0], deleted_wall[1]).is_wall = false;
+            for (const Vector2i& offset : offsets){
+               Vector2i offset_pt = offset + deleted_wall;
+               if (offset_pt[0] >= 0 && offset_pt[0] < num_x && offset_pt[1] >= 0 && offset_pt[1] < num_y) {
+                  wall_grid_(offset_pt[0], offset_pt[1]).padding_counter--;
+                  if (wall_grid_(offset_pt[0], offset_pt[1]).padding_counter < 0) {
+                     std::cout << "<GP UWG> [ERROR] Padding Counter less than zero! wall? " << wall_grid_(offset_pt[0], offset_pt[1]).is_wall <<"\n";
+                  }
+               }
             }
          }
       }
    }
 
+   // Add walls
+   for (const Vector2i& new_wall : new_walls) {
+      // Wall isn't new
 
-   // TODO: add functionality to remove walls
-   // Note: non-trivial, will need to add "wall suport" set for each wall and only delete if its empty
+      if (new_wall[0] >= 0 && new_wall[0] < num_x && new_wall[1] >= 0 && new_wall[1] < num_y) {
+
+         // We need this check so that we don't double add walls
+         bool is_free = !wall_grid_(new_wall[0], new_wall[1]).is_wall;
+         if (is_free) {
+
+            wall_grid_(new_wall[0], new_wall[1]).is_wall = true;
+            for (const Vector2i& offset : offsets){
+               Vector2i offset_pt = offset + new_wall;
+               if (offset_pt[0] >= 0 && offset_pt[0] < num_x && offset_pt[1] >= 0 && offset_pt[1] < num_y) {
+                  wall_grid_(offset_pt[0], offset_pt[1]).padding_counter++;
+               }
+            }
+         }
+      }
+   }
+
 }

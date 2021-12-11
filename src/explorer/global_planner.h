@@ -24,13 +24,14 @@ class Global_Planner {
 
   const float NUM_PIXELS_GOAL = 5.;
   const int NUM_ANGLES = 8;
+  const float raster_pixel_size;
 
-  float x_min;
-  float y_min;
-  float x_max;
-  float y_max;
-  int num_x;
-  int num_y;
+  const float x_min;
+  const float x_max;
+  const float y_min;
+  const float y_max;
+  const int num_x;
+  const int num_y;
 
   enum class PathAlgo {
     Simple = 0,
@@ -43,7 +44,7 @@ class Global_Planner {
   EvidenceGrid& evidence_grid_;
 
   // Constuctor
-  explicit Global_Planner(EvidenceGrid& evidence_grid);
+  explicit Global_Planner(EvidenceGrid& evidence_grid, float raster_pixel_size, int x_min, int x_max, int y_min, int y_max);
 
   // Sets the global navigation goal at the provided global coordinates
   void SetGlobalNavGoal(Vector2f loc);
@@ -71,7 +72,6 @@ class Global_Planner {
   // Check if initialized
   bool IsReady();
 
-  void AddWallsFromSLAM(std::vector<Vector2f> point_cloud_);
  private:
 
   struct GridPt {
@@ -92,7 +92,16 @@ class Global_Planner {
   Eigen::Matrix<GridPtSimple, -1, -1> simple_grid_;
 
   // Wall grid: 0 = open, 1 = wall, 2 = padding
-  Eigen::Matrix<int, -1, -1> wall_grid_;
+
+  struct WallStruct {
+    bool is_wall;
+    int padding_counter;
+  };
+  
+
+  Eigen::Matrix<WallStruct, -1, -1> wall_grid_;
+
+
 
  public:
   // Converts a map point to a grid point
@@ -102,7 +111,7 @@ class Global_Planner {
   Vector2f gridToPoint(Vector2i grid_pt);
 
   // Update wall grid
-  void updateWallGrid(std::unordered_set<Vector2i, matrix_hash<Vector2i>> new_walls, bool soft_update);
+  void updateWallGrid(std::unordered_set<Vector2i, matrix_hash<Vector2i>> new_walls, std::unordered_set<Vector2i, matrix_hash<Vector2i>> deleted_walls, bool soft_update);
  private:
 
   // A-Star path algos
