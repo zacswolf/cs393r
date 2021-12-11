@@ -38,14 +38,14 @@
 // Observe Laser
 DEFINE_double(min_odom_loc_diff, .5, "Minimum Odom translation diff to create a new pose");
 DEFINE_double(min_odom_angle_diff, 20, "Minimum Odom rotation diff to create a new pose");
-DEFINE_int32(map_scan_mod, 4, "The modulo of the number of point used during create map");
+DEFINE_int32(map_scan_mod, 1, "The modulo of the number of point used during create map");
 
 // Raster
 DEFINE_double(raster_map_dist, 12.0, "Maximum distance of x & y axes in the rasterized map");
 DEFINE_double(raster_pixel_dist, 0.01, "Size of each pixel in the raster map");
 DEFINE_double(sd_laser_blur, 0.25, "Std dev of laser scan for blurred raster");
 DEFINE_double(sd_laser_sharp, 0.025, "Std dev of laser scan for sharp raster");
-// Q: Should sharp and blur have diff raster windows
+// Q: Should sharp and blur have diff raster windows, A: yes but we're lazy
 DEFINE_int32(raster_window, 20, "Number of raster pixels in each direction that a point's pdf effects"); 
 
 // CSM
@@ -56,12 +56,12 @@ DEFINE_double(sd_odom_y, 1.0, "Std dev of odometry in y direction");
 DEFINE_double(sd_odom_angle, 30.0, "Std dev of odometry angle");
 
 DEFINE_double(csm_transl_coarse_max, 0.5, "Max translation for coarse CSM");
-DEFINE_double(csm_angle_coarse_max, 20, "Max rotation for coarse CSM");
+DEFINE_double(csm_angle_coarse_max, 30.0, "Max rotation for coarse CSM");
 DEFINE_double(csm_fine_max_multiplier, 1.5, "Multiplier on coarse step for max translation & rotation for fine CSM");
 DEFINE_double(csm_transl_coarse_step, 0.1, "Translation step size for coarse CSM");
 DEFINE_double(csm_transl_fine_step, 0.01, "Translation step size for fine CSM");
-DEFINE_double(csm_angle_coarse_step, 1, "Rotation step size for coarse CSM");
-DEFINE_double(csm_angle_fine_step, 0.05, "Rotation step size for fine CSM");
+DEFINE_double(csm_angle_coarse_step, 1.5, "Rotation step size for coarse CSM");
+DEFINE_double(csm_angle_fine_step, 0.5, "Rotation step size for fine CSM");
 
 
 using namespace math_util;
@@ -91,18 +91,55 @@ SLAM::SLAM() :
     current_odom_loc_(0, 0),
     current_odom_angle_(0),
     prev_pose_odom_loc_(0, 0),
-    prev_pose_odom_angle_(0) {}
+    prev_pose_odom_angle_(0),
+    last_pose_soft_(false) {
 
+      soft_pose_ = Pose{Vector2f(0,0),0};
+
+    }
+
+// This doesn't deal with soft pose updates
 void SLAM::GetPose(Eigen::Vector2f* loc, float* angle) const {
   // Return the latest pose estimate of the robot.
   if (!pose_initialized_) {
     *loc = Eigen::Vector2f(0., 0.);
     *angle = 0;
+    std::cout << "SLAM pose not initialized! Returning (0,0)\n";
   } else {
     auto prev_pose = prev_poses_.back();
+
+    float del_odom_angle = current_odom_angle_ - prev_pose_odom_angle_;
+    Eigen::Rotation2Df rotation_odom(-prev_pose_odom_angle_);
+    Eigen::Rotation2Df rotation_pose(prev_pose.angle);
+    Eigen::Vector2f del_odom = rotation_pose * rotation_odom * (current_odom_loc_ - prev_pose_odom_loc_);
+
+    //std::cout << "SLAM Loc: " << prev_pose.loc.transpose() << " -- w/ Odom: -- " << (prev_pose.loc + del_odom).transpose() << "\n";
+
+    *loc = prev_pose.loc + del_odom;
+    *angle = prev_pose.angle + del_odom_angle;
+  }
+}
+
+// This does deal with soft pose updates
+void SLAM::GetPoseNoOdom(Eigen::Vector2f* loc, float* angle) const {
+  // Return the latest pose estimate of the robot w/o odometry.
+  if (!pose_initialized_) {
+    *loc = Eigen::Vector2f(0., 0.);
+    *angle = 0;
+  } else if (!last_pose_soft_) {
+    auto prev_pose = prev_poses_.back();
+
     *loc = prev_pose.loc;
     *angle = prev_pose.angle;
+  } else {
+    *loc = soft_pose_.loc;
+    *angle = soft_pose_.angle;
   }
+}
+
+
+bool SLAM::isInitialized() {
+  return pose_initialized_ && odom_initialized_ && slam_started_;
 }
 
 std::vector<Eigen::Vector2f> SLAM::ScanToPointCloud(
@@ -131,42 +168,50 @@ std::vector<Eigen::Vector2f> SLAM::ScanToPointCloud(
 
 }
 
-void SLAM::ObserveLaser(const vector<float>& ranges,
-                        float range_min,
-                        float range_max,
-                        float angle_min,
-                        float angle_max) {
+bool SLAM::ObservePointCloud(const std::vector<Vector2f>& cloud, const std::vector<Vector2f>& cloud_open, std::vector<Vector2f>& new_points, std::vector<Vector2f>& new_points_open, bool soft_update) {
   // A new laser scan has been observed. Decide whether to add it as a pose
   // for SLAM. If decided to add, align it to the scan from the last saved pose,
   // and save both the scan and the optimized pose.
   
 
-  if (!pose_initialized_) {
-    std::vector<Eigen::Vector2f> point_cloud = ScanToPointCloud(ranges, range_min, range_max, angle_min, angle_max);
+  if (!pose_initialized_ && odom_initialized_) {
+    std::vector<Eigen::Vector2f> point_cloud = cloud;
+    std::vector<Eigen::Vector2f> point_cloud_open = cloud_open;
     
     prev_pose_point_cloud_ = point_cloud;
     prev_poses_.push_back(SLAM::Pose{Eigen::Vector2f(0, 0), 0});
 
     // Add first point cloud to map_
     for (uint i = 0; i < point_cloud.size(); i += FLAGS_map_scan_mod) {
-        map_.push_back(point_cloud[i]);
+        //map_.push_back(point_cloud[i]);
+        new_points.push_back(point_cloud[i]);
     }
 
+    for (uint i = 0; i < point_cloud_open.size(); i += FLAGS_map_scan_mod) {
+        new_points_open.push_back(point_cloud_open[i]);
+    }
+    
+    // Update previous pose odom
+    prev_pose_odom_angle_ = current_odom_angle_;
+    prev_pose_odom_loc_ = current_odom_loc_;
+
     pose_initialized_ = true;
-    std::cout << "Pose initialized!\n\n";
+    std::cout << "<SLAM> Pose initialized!\n";
+    return true;
   } else if (odom_initialized_) {
     float angle_diff = AngleDiff(current_odom_angle_, prev_pose_odom_angle_);
     Eigen::Vector2f loc_diff = current_odom_loc_ - prev_pose_odom_loc_;
 
-      // Add a new pose when odom dist or angle diff is above threshhold
-    if (loc_diff.norm() > FLAGS_min_odom_loc_diff || RadToDeg(abs(angle_diff)) > FLAGS_min_odom_angle_diff) {
-      std::cout << "Loc Diff: " << loc_diff.norm() << "\n";
-      std::cout << "Angle Diff: " << RadToDeg(angle_diff) << "\n";
-      std::cout << "Using laser scan!\n";
+    // Add a new pose when odom dist or angle diff is above threshhold
+    if (loc_diff.norm() > FLAGS_min_odom_loc_diff || RadToDeg(abs(angle_diff)) > FLAGS_min_odom_angle_diff || soft_update) {
+      // std::cout << "Loc Diff: " << loc_diff.norm() << "\n";
+      // std::cout << "Angle Diff: " << RadToDeg(angle_diff) << "\n";
+      // std::cout << "Using laser scan!\n";
 
       // Convert laser scan to point cloud
-      std::vector<Eigen::Vector2f> point_cloud = ScanToPointCloud(ranges, range_min, range_max, angle_min, angle_max);
-      std::cout << "Created point cloud!\n";
+      std::vector<Eigen::Vector2f> point_cloud = cloud;
+      std::vector<Eigen::Vector2f> point_cloud_open = cloud_open;
+      // std::cout << "Created point cloud!\n";
 
       // Create blurred raster
       Eigen::MatrixXf raster_blur = RasterizePointCloud(prev_pose_point_cloud_, FLAGS_sd_laser_blur);
@@ -174,11 +219,11 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
       // Create sharp raster
       Eigen::MatrixXf raster_sharp = RasterizePointCloud(prev_pose_point_cloud_, FLAGS_sd_laser_sharp);
       
-      std::cout << "Created raster map!\n";
+      // std::cout << "Created raster map!\n";
 
       // Get best pose relative to previous pose using CSM
       SLAM::Pose rel_prev_pose = Csm(point_cloud, raster_blur, raster_sharp);
-      std::cout << "Finished CSM!\n\n";
+      // std::cout << "Finished CSM!\n\n";
 
       // Convert current pose from previous pose frame to original pose frame
       SLAM::Pose pose;
@@ -187,25 +232,41 @@ void SLAM::ObserveLaser(const vector<float>& ranges,
       pose.angle = AngleMod(rel_prev_pose.angle + prev_pose.angle);
       pose.loc = rotation_pose * rel_prev_pose.loc + prev_pose.loc;
 
-      // Save current pose's point cloud for future raster
-      prev_pose_point_cloud_ = point_cloud;
-
-      // Save current pose 
-      prev_poses_.push_back(pose);
-
       // Save current pose's point cloud relative to original pose frame to map
       Eigen::Rotation2Df rotation_new_pose(pose.angle);
       for (uint i = 0; i < point_cloud.size(); i += FLAGS_map_scan_mod) {
         Eigen::Vector2f new_point = rotation_new_pose * point_cloud[i] + pose.loc;
-        map_.push_back(new_point);
+        new_points.push_back(new_point);
       }
 
-      // Update previous pose odom
-      prev_pose_odom_angle_ = current_odom_angle_;
-      prev_pose_odom_loc_ = current_odom_loc_;
-    }
-  }
+      for (uint i = 0; i < point_cloud_open.size(); i += FLAGS_map_scan_mod) {
+        Eigen::Vector2f new_point = rotation_new_pose * point_cloud_open[i] + pose.loc;
+        new_points_open.push_back(new_point);
+      }
 
+      // If we are doing a soft update we should not save the slam pose
+      if (!soft_update) {
+        // Save current pose's point cloud for future raster
+        prev_pose_point_cloud_ = point_cloud;
+
+        // Save current pose 
+        prev_poses_.push_back(pose);
+
+        // Update previous pose odom
+        prev_pose_odom_angle_ = current_odom_angle_;
+        prev_pose_odom_loc_ = current_odom_loc_;
+
+        last_pose_soft_ = false;
+      } else {
+        last_pose_soft_ = true;
+        soft_pose_ = pose;
+      }
+
+      return true;
+    }
+    slam_started_ = true;
+  }
+  return false;
 }
 
 Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cloud, float sd_laser) {
@@ -245,7 +306,7 @@ Eigen::MatrixXf SLAM::RasterizePointCloud(const vector<Eigen::Vector2f> point_cl
   return raster;
 }
 
-SLAM::Pose SLAM::Csm(const vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster_blur, Eigen::MatrixXf raster_sharp) {
+SLAM::Pose SLAM::Csm(const vector<Eigen::Vector2f> point_cloud, const Eigen::MatrixXf raster_blur, const Eigen::MatrixXf raster_sharp) {
   // Iterate through angle, dx, and dy
   // Center the search around our odomety position
 
@@ -285,7 +346,7 @@ SLAM::Pose SLAM::Csm(const vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf 
   return csm_pose;
 }
 
-SLAM::Pose SLAM::CsmSearch(std::vector<Eigen::Vector2f> sampled_point_cloud, Eigen::MatrixXf raster, SLAM::Pose pose_est,
+SLAM::Pose SLAM::CsmSearch(const std::vector<Eigen::Vector2f> sampled_point_cloud, const Eigen::MatrixXf raster, SLAM::Pose pose_est,
                  float angle_offset_max, float angle_offset_step, 
                  float transl_offset_max, float transl_offset_step) {
   
@@ -330,7 +391,7 @@ SLAM::Pose SLAM::CsmSearch(std::vector<Eigen::Vector2f> sampled_point_cloud, Eig
         Eigen::Vector2f loc = Eigen::Vector2f(x, y);
 
         float raster_score = 0;
-        for (auto& point : rotated_point_cloud) {
+        for (Vector2f& point : rotated_point_cloud) {
           // Relative to previous odometry
           Eigen::Vector2f tranformed_point = point + loc;
 
@@ -363,7 +424,7 @@ SLAM::Pose SLAM::CsmSearch(std::vector<Eigen::Vector2f> sampled_point_cloud, Eig
 
 void SLAM::ObserveOdometry(const Vector2f& odom_loc, const float odom_angle) {
   if (!odom_initialized_ && odom_counter_ <= 0) {
-    std::cout << "Initializing odom! \n";
+    std::cout << "<SLAM> Initializing odom!\n";
     prev_pose_odom_angle_ = odom_angle;
     prev_pose_odom_loc_ = odom_loc;
     odom_initialized_ = true;
@@ -375,6 +436,8 @@ void SLAM::ObserveOdometry(const Vector2f& odom_loc, const float odom_angle) {
   // Keep track of odometry to estimate how far the robot has moved between poses.
   current_odom_angle_ = odom_angle;
   current_odom_loc_ = odom_loc;
+
+  //std::cout << "Current Odom: " << current_odom_loc_.transpose() << " -- Prev Odom: " << prev_pose_odom_loc_.transpose() << "\n";
 }
 
 vector<Vector2f> SLAM::GetMap() {
