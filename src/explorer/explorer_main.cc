@@ -101,15 +101,18 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
 
   static vector<Vector2f> point_cloud_open_(num_rays);
   point_cloud_open_.clear();
+  //std::cout << "########## " << msg.range_max << "\n";
 
   // Convert the LaserScan to a point cloud
   for (int i = 0; i < num_rays; i++) {
     float range = msg.ranges[i];
     float angle = msg.angle_min + i * msg.angle_increment;
     Vector2f laser_loc = Vector2f(range * cos(angle), range * sin(angle)) + kLaserLoc;
-    if (range > msg.range_min && range < msg.range_max) {
+    // if (range > msg.range_min && range < msg.range_max) {
+    if (range > msg.range_min && range < 10.) {
       point_cloud_.push_back(laser_loc);
-    } else {
+    } else if (range >= 10.){
+      laser_loc = Vector2f(10. * cos(angle), 10 * sin(angle)) + kLaserLoc;
       point_cloud_open_.push_back(laser_loc);
     }
   }

@@ -44,11 +44,11 @@ class EvidenceGrid {
 
     // Change these values in global_planner.cc too!
     raster_pixel_size = 0.1;
-    x_min = -50;
-    x_max = 50;
+    x_min = -60;
+    x_max = 60;
     
-    y_min = -50;
-    y_max = 50;
+    y_min = -60;
+    y_max = 60;
 
     num_x = (x_max - x_min) / raster_pixel_size;
     num_y = (y_max - y_min) / raster_pixel_size;
@@ -65,6 +65,7 @@ class EvidenceGrid {
   void UpdateEvidenceGrid(std::vector<Eigen::Vector2f> new_points, std::vector<Eigen::Vector2f> new_points_open, Eigen::Vector2f robot_loc, float robot_angle, std::unordered_set<Vector2i, matrix_hash<Eigen::Vector2i>> &new_walls, bool soft_update) {
     Eigen::Vector2i grid_robot_loc = pointToGrid(robot_loc);
     //Eigen::Vector2i grid_robot_loc = pointToGrid(Eigen::Vector2f(0,0));
+    //std::cout << grid_robot_loc.transpose() << "\n";
     
     for (Vector2f& point : new_points) {
       plotLine(grid_robot_loc, point, false, new_walls);
@@ -159,7 +160,7 @@ class EvidenceGrid {
   }
 
   void plotLineHigh(int x0, int y0, int x1, int y1, bool isOpen) {
-    //std::cout << "High\n";
+    //std::cout << "High --  (" << x0 << ", " << y0 << ") to (" << x1 << ", " << y1 << ")\n";
     int dx = x1 - x0;
     int dy = y1 - y0;
     int xi = 1;

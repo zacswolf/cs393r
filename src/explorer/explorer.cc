@@ -70,6 +70,7 @@ DEFINE_double(width, .2286, "The track width of the robot");
 DEFINE_double(del_length, .088075, "The length margin of the robot");
 DEFINE_double(del_width, .0254, "The width margin of the robot");
 DEFINE_double(safety_margin, .0, "The safety margin for the robot");
+DEFINE_int32(run_counter, 40, "Initialization routine");
 
 
 namespace {
@@ -102,7 +103,8 @@ Explorer::Explorer(const string& map_file, ros::NodeHandle* n) :
     global_planner_(evidence_grid_),
     slam_(),
     frontier_(),
-    frontier_update_ready_(true) {
+    frontier_update_ready_(true),
+    run_counter_(0) {
 
   //global_planner_.evidence_grid_ = &evidence_grid_;
 
@@ -179,8 +181,12 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
     cout << "<Exp OPC> Soft Update==================\n";
   }
 
+  static double t_glpath_last = 0; // for rate limit
   
   bool slam_update = slam_.ObservePointCloud(cloud, cloud_open, new_points, new_open_points, soft_update);
+  if (!frontier_update_ready_ && slam_update) {
+    t_glpath_last = GetMonotonicTime();
+  }
   frontier_update_ready_ |= slam_update;
   
   Vector2f robot_loc(0,0);
@@ -192,9 +198,10 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
   evidence_grid_.UpdateEvidenceGrid(new_points, new_open_points, robot_loc, robot_angle, new_walls, soft_update);
   global_planner_.updateWallGrid(new_walls, soft_update);
   
-  //static int slam_update_counter = 4;
+  static int slam_update_timer = 0;
   if (slam_update) {
     std::cout << "SLAM Updated\n";
+    slam_update_timer = GetMonotonicTime();
     // slam_update_counter++;
     // if (slam_update_counter >= 4) {
     //   slam_update_counter = 0;
@@ -204,11 +211,12 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
     // }
   }
 
-  static double t_glpath_last = 0; // for rate limit
   bool timer_update = GetMonotonicTime() - t_glpath_last > 8;
-  if (slam_.isInitialized() && (soft_update || (timer_update && frontier_update_ready_))) {
+  bool slam_timer_update = GetMonotonicTime() - slam_update_timer > 12;
+  if (slam_.isInitialized() && (soft_update || (timer_update && frontier_update_ready_) || slam_timer_update)) {
   // if (slam_update) {
     t_glpath_last = GetMonotonicTime();
+    slam_update_timer = GetMonotonicTime();
     //std::cout << "SLAM Updated\n";
     // Go to a new frontier
     // Step 1: Find frontier point
@@ -366,6 +374,14 @@ void Explorer::Run() {
     drive_msg_.curvature = -drive_msg_.curvature;
   }
   
+
+  if (run_counter_ < FLAGS_run_counter && slam_.isInitialized()) {
+    std::cout << "<Explorer Run> Init routine!!\n";
+    drive_msg_.curvature = 1;
+    drive_msg_.velocity = 0.5;
+    run_counter_++;
+  }
+
 
   // Shift previous values, for forward predict
   for(int i = COMMAND_MEMORY_LENGTH-2; i >= 0; i--){

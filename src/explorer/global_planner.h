@@ -22,7 +22,7 @@ class Global_Planner {
  public:
   bool at_path_end_;
 
-  const float NUM_PIXELS_GOAL = 3.;
+  const float NUM_PIXELS_GOAL = 5.;
   const int NUM_ANGLES = 8;
 
   float x_min;

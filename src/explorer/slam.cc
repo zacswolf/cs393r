@@ -55,13 +55,13 @@ DEFINE_double(sd_odom_x, 1.0, "Std dev of odometry in x direction");
 DEFINE_double(sd_odom_y, 1.0, "Std dev of odometry in y direction");
 DEFINE_double(sd_odom_angle, 30.0, "Std dev of odometry angle");
 
-DEFINE_double(csm_transl_coarse_max, 0.8, "Max translation for coarse CSM");
-DEFINE_double(csm_angle_coarse_max, 35.0, "Max rotation for coarse CSM");
-DEFINE_double(csm_fine_max_multiplier, 2.0, "Multiplier on coarse step for max translation & rotation for fine CSM");
+DEFINE_double(csm_transl_coarse_max, 0.5, "Max translation for coarse CSM");
+DEFINE_double(csm_angle_coarse_max, 30.0, "Max rotation for coarse CSM");
+DEFINE_double(csm_fine_max_multiplier, 1.5, "Multiplier on coarse step for max translation & rotation for fine CSM");
 DEFINE_double(csm_transl_coarse_step, 0.1, "Translation step size for coarse CSM");
 DEFINE_double(csm_transl_fine_step, 0.01, "Translation step size for fine CSM");
 DEFINE_double(csm_angle_coarse_step, 1.5, "Rotation step size for coarse CSM");
-DEFINE_double(csm_angle_fine_step, 0.1, "Rotation step size for fine CSM");
+DEFINE_double(csm_angle_fine_step, 0.5, "Rotation step size for fine CSM");
 
 
 using namespace math_util;

@@ -25,11 +25,11 @@ Global_Planner::Global_Planner(EvidenceGrid& evidence_grid): at_path_end_(false)
    // Turn Map into grid
    grid_ = std::vector<Eigen::Matrix<GridPt,-1,-1>>(FLAGS_num_angles);
    
-   x_min = -50;
-   x_max = 50;
+   x_min = -60;
+   x_max = 60;
    
-   y_min = -50;
-   y_max = 50;
+   y_min = -60;
+   y_max = 60;
 
    num_x = (x_max - x_min) / FLAGS_raster_pixel_size;
    num_y = (y_max - y_min) / FLAGS_raster_pixel_size;
@@ -70,7 +70,7 @@ Eigen::Vector3f Global_Planner::GetLocalNavGoal(Vector2f veh_loc, float veh_angl
 
    at_path_end_ = path_index_ >= ((int)global_path_.size()-1) - 2;
 
-   int path_lookahead = 7;
+   int path_lookahead = 9;
 
    int local_path_idx = std::min(path_index_ + path_lookahead, (int)global_path_.size()-1);
 
@@ -146,7 +146,7 @@ void Global_Planner::SimpleAStar(Vector2i veh_loc, Vector2i goal_loc) {
             // We want to penalize moving within wall padding so we add 10 map pixels to the edge cost
             bool neighbor_in_padding = (wall_grid_(neighbor[0], neighbor[1]) == 2);
             if (neighbor_in_padding) {
-               edge_cost *= 5;
+               edge_cost *= 1024;
             }
             
             float new_cost = simple_grid_(current[0], current[1]).cost + edge_cost;
@@ -242,14 +242,14 @@ void Global_Planner::ComplexAStar(Vector2i veh_loc, float veh_angle, Vector2i go
 
             // Penalize edge_cost if we have to go backwards
             if (is_backward) {
-               edge_cost *= 64;
+               edge_cost *= 8;
             }
 
             // Neighbors can be in wall padding if current is in wall padding
             // We want to penalize moving within wall padding so we add 10 map pixels to the edge cost
             bool neighbor_in_padding = (wall_grid_(neighbor[0], neighbor[1]) == 2);
             if (neighbor_in_padding){
-               edge_cost *= 5;
+               edge_cost *= 1024;
             }
             
             float new_cost = grid_[current[2]](current[0], current[1]).cost + edge_cost;
@@ -386,7 +386,7 @@ void Global_Planner::UpdatePathIndex(Vector2f veh_loc, float veh_angle) {
 // Checks whether the global path is still valid, recomputing the path if not
 void Global_Planner::CheckPathValid(Vector2f veh_loc, float veh_angle) {
 
-   if ((global_path_[path_index_].segment(0,2) - veh_loc).norm() > 2.) {
+   if ((global_path_[path_index_].segment(0,2) - veh_loc).norm() > 0.5) {
       ComputeGlobalPath(veh_loc, veh_angle);
    }
 
@@ -398,7 +398,7 @@ void Global_Planner::PlotWallVis(amrl_msgs::VisualizationMsg& vis_msg) {
    //const int num_y = (y_max - y_min) / FLAGS_raster_pixel_size;
    for (int x = 0; x < num_x; x++) {
       for (int y = 0; y < num_y; y++) {
-         bool is_wall = wall_grid_(x, y) == 1;
+         bool is_wall = wall_grid_(x, y) == 2;
          if (is_wall) {
             // Plot wall
             Eigen::Vector2f pt = gridToPoint(Eigen::Vector2i(x,y));
@@ -450,15 +450,15 @@ std::vector<Eigen::Vector4i> Global_Planner::GetComplexNeighbors(Eigen::Vector4i
    int current_ang = current[2];
 
    // (x, y, angle, is_backward)
-   const static Eigen::Vector4i pot_offsets[8][4] = {
+   const static Eigen::Vector4i pot_offsets[8][6] = {
       {
          // 0
          Eigen::Vector4i(1, 0, 0, 0),
          Eigen::Vector4i(10, 5, 1, 0),
          Eigen::Vector4i(10, -5, 7, 0),
          Eigen::Vector4i(-4, 0, 0, 1),
-         // Eigen::Vector4i(-10, 5, 7, 1),
-         // Eigen::Vector4i(-10, -5, 1, 1),
+         Eigen::Vector4i(-10, 5, 7, 1),
+         Eigen::Vector4i(-10, -5, 1, 1),
       },
       {
          // 1
@@ -466,8 +466,8 @@ std::vector<Eigen::Vector4i> Global_Planner::GetComplexNeighbors(Eigen::Vector4i
          Eigen::Vector4i(5, 10, 2, 0),
          Eigen::Vector4i(10, 5, 0, 0),
          Eigen::Vector4i(-4, -4, 1, 1),
-         // Eigen::Vector4i(-10, -5, 0, 1),
-         // Eigen::Vector4i(-5, -10, 2, 1)
+         Eigen::Vector4i(-10, -5, 0, 1),
+         Eigen::Vector4i(-5, -10, 2, 1)
       },
       {
          // 2
@@ -475,8 +475,8 @@ std::vector<Eigen::Vector4i> Global_Planner::GetComplexNeighbors(Eigen::Vector4i
          Eigen::Vector4i(-5, 10, 3, 0),
          Eigen::Vector4i(5, 10, 1, 0),
          Eigen::Vector4i(0, -4, 2, 1),
-         // Eigen::Vector4i(-5, -10, 1, 1),
-         // Eigen::Vector4i(5, -10, 3, 1)
+         Eigen::Vector4i(-5, -10, 1, 1),
+         Eigen::Vector4i(5, -10, 3, 1)
       },
       {
          // 3
@@ -484,8 +484,8 @@ std::vector<Eigen::Vector4i> Global_Planner::GetComplexNeighbors(Eigen::Vector4i
          Eigen::Vector4i(-10, 5, 4, 0),
          Eigen::Vector4i(-5, 10, 2, 0),
          Eigen::Vector4i(4, -4, 3, 1),
-         // Eigen::Vector4i(5, -10, 2, 1),
-         // Eigen::Vector4i(10, -5, 4, 1)
+         Eigen::Vector4i(5, -10, 2, 1),
+         Eigen::Vector4i(10, -5, 4, 1)
       },
       {
          // 4
@@ -493,8 +493,8 @@ std::vector<Eigen::Vector4i> Global_Planner::GetComplexNeighbors(Eigen::Vector4i
          Eigen::Vector4i(-10, -5, 5, 0),
          Eigen::Vector4i(-10, 5, 3, 0),
          Eigen::Vector4i(4, 0, 4, 1),
-         // Eigen::Vector4i(10, -5, 3, 1),
-         // Eigen::Vector4i(10, 5, 5, 1)
+         Eigen::Vector4i(10, -5, 3, 1),
+         Eigen::Vector4i(10, 5, 5, 1)
       },
       {
          // 5
@@ -502,8 +502,8 @@ std::vector<Eigen::Vector4i> Global_Planner::GetComplexNeighbors(Eigen::Vector4i
          Eigen::Vector4i(-5, -10, 6, 0),
          Eigen::Vector4i(-10, -5, 4, 0),
          Eigen::Vector4i(4, 4, 5, 1),
-         // Eigen::Vector4i(10, 5, 4, 1),
-         // Eigen::Vector4i(5, 10, 6, 1)
+         Eigen::Vector4i(10, 5, 4, 1),
+         Eigen::Vector4i(5, 10, 6, 1)
       },
       {
          // 6
@@ -511,8 +511,8 @@ std::vector<Eigen::Vector4i> Global_Planner::GetComplexNeighbors(Eigen::Vector4i
          Eigen::Vector4i(5, -10, 7, 0),
          Eigen::Vector4i(-5, -10, 5, 0),
          Eigen::Vector4i(0, 4, 6, 1),
-         // Eigen::Vector4i(5, 10, 5, 1),
-         // Eigen::Vector4i(-5, 10, 7, 1)
+         Eigen::Vector4i(5, 10, 5, 1),
+         Eigen::Vector4i(-5, 10, 7, 1)
       },
       {
          // 7
@@ -520,8 +520,8 @@ std::vector<Eigen::Vector4i> Global_Planner::GetComplexNeighbors(Eigen::Vector4i
          Eigen::Vector4i(10, -5, 0, 0),
          Eigen::Vector4i(5, -10, 6, 0),
          Eigen::Vector4i(-4, 4, 7, 1),
-         // Eigen::Vector4i(-5, 10, 6, 1),
-         // Eigen::Vector4i(-10, 5, 0, 1)
+         Eigen::Vector4i(-5, 10, 6, 1),
+         Eigen::Vector4i(-10, 5, 0, 1)
       }
    };
 
@@ -630,16 +630,16 @@ void Global_Planner::AddWallsFromSLAM(std::vector<Eigen::Vector2f> point_cloud) 
       Eigen::Vector2i(0, 2),
       Eigen::Vector2i(-2, 0),
       Eigen::Vector2i(2, 0),
-      //Eigen::Vector2i(-3, 0),
+      Eigen::Vector2i(-3, 0),
       Eigen::Vector2i(-2, 1),
       Eigen::Vector2i(-1, 2),
-      //Eigen::Vector2i(0, 3),
+      Eigen::Vector2i(0, 3),
       Eigen::Vector2i(1, 2),
       Eigen::Vector2i(2, 1),
-      //Eigen::Vector2i(3, 0),
+      Eigen::Vector2i(3, 0),
       Eigen::Vector2i(-2, -1),
       Eigen::Vector2i(-1, -2),
-      //Eigen::Vector2i(0, -3),
+      Eigen::Vector2i(0, -3),
       Eigen::Vector2i(1, -2),
       Eigen::Vector2i(2, -1),
    };

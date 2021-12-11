@@ -133,6 +133,7 @@ class Explorer {
   Frontier frontier_;
  private:
   bool frontier_update_ready_;
+  int run_counter_;
 };
 
 }  // namespace explorer

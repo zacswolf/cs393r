@@ -121,6 +121,11 @@ double Car::distance_to_collision(Path& path, Vector2f pt) {
 
 void Car::calcPathMetrics(Path& path, const std::vector<Vector2f>& point_cloud) {
 
+  if (point_cloud.size() == 0) {
+    std::cout << "<Car> ERROR - point cloud empty!\n";
+    return;
+  }
+
   float arc_angle_to_point;
   float clearance;
   double free_path_length = std::numeric_limits<float>::max();
