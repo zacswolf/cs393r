@@ -219,7 +219,7 @@ void Explorer::ObservePointCloud(const vector<Vector2f>& cloud,
     // }
   }
 
-  bool timer_update = GetMonotonicTime() - t_glpath_last > 5;
+  bool timer_update = GetMonotonicTime() - t_glpath_last > 8;
   bool slam_timer_update = GetMonotonicTime() - slam_update_timer > 10;
   if (slam_.isInitialized() && (soft_update || (timer_update && frontier_update_ready_) || slam_timer_update)) {
     // Go to a new frontier
