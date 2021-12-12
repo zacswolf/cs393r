@@ -34,87 +34,87 @@ namespace slam {
 
 class SLAM {
 
- public:
-  // Default Constructor.
-  SLAM();
+public:
+    // Default Constructor.
+    SLAM();
 
-  
-  // Observe a new point cloud.
-  bool ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud, const std::vector<Eigen::Vector2f>& cloud_open, std::vector<Eigen::Vector2f>& new_points, std::vector<Eigen::Vector2f>& new_points_open, bool force_update);
 
-  // Observe new odometry-reported location.
-  void ObserveOdometry(const Eigen::Vector2f& odom_loc,
-                       const float odom_angle);
+    // Observe a new point cloud.
+    bool ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud, const std::vector<Eigen::Vector2f>& cloud_open, std::vector<Eigen::Vector2f>& new_points, std::vector<Eigen::Vector2f>& new_points_open, bool force_update);
 
-  // Get latest map.
-  std::vector<Eigen::Vector2f> GetMap();
-  
-  std::vector<std::vector<float>> GetRasteredMap();
+    // Observe new odometry-reported location.
+    void ObserveOdometry(const Eigen::Vector2f& odom_loc,
+        const float odom_angle);
 
-  // Get latest robot pose.
-  void GetPose(Eigen::Vector2f* loc, float* angle) const;
+    // Get latest map.
+    std::vector<Eigen::Vector2f> GetMap();
 
-  //
-  void GetPoseNoOdom(Eigen::Vector2f* loc, float* angle) const;
+    std::vector<std::vector<float>> GetRasteredMap();
 
-  bool isInitialized();
+    // Get latest robot pose.
+    void GetPose(Eigen::Vector2f* loc, float* angle) const;
 
- private:
+    //
+    void GetPoseNoOdom(Eigen::Vector2f* loc, float* angle) const;
 
-  // Our pose representation
-  struct Pose {
-    Eigen::Vector2f loc;
-    float angle;
-  };
+    bool isInitialized();
 
-  // Convert scan to point cloud
-  std::vector<Eigen::Vector2f> ScanToPointCloud(
-                    const std::vector<float>& ranges,
-                    float range_min,
-                    float range_max,
-                    float angle_min,
-                    float angle_max);
+private:
 
-  // Rasterize into our map
-  // MatrixXf is of dimention raster_map_dist/raster_dist
-  Eigen::MatrixXf RasterizePointCloud(const std::vector<Eigen::Vector2f> point_cloud, float sd_laser);
+    // Our pose representation
+    struct Pose {
+        Eigen::Vector2f loc;
+        float angle;
+    };
 
-  // Correlative Scan Matching
-  Pose Csm(const std::vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster, Eigen::MatrixXf raster_fine);
+    // Convert scan to point cloud
+    std::vector<Eigen::Vector2f> ScanToPointCloud(
+        const std::vector<float>& ranges,
+        float range_min,
+        float range_max,
+        float angle_min,
+        float angle_max);
 
-  Pose CsmSearch(std::vector<Eigen::Vector2f> sampled_point_cloud, Eigen::MatrixXf raster, Pose pose_est,
-                 float angle_offset_max, float angle_offset_step,
-                 float transl_offset_max, float transl_offset_step);
+    // Rasterize into our map
+    // MatrixXf is of dimention raster_map_dist/raster_dist
+    Eigen::MatrixXf RasterizePointCloud(const std::vector<Eigen::Vector2f> point_cloud, float sd_laser);
 
-  // Member variables
+    // Correlative Scan Matching
+    Pose Csm(const std::vector<Eigen::Vector2f> point_cloud, Eigen::MatrixXf raster, Eigen::MatrixXf raster_fine);
 
-  bool odom_initialized_;
-  int odom_counter_;
+    Pose CsmSearch(std::vector<Eigen::Vector2f> sampled_point_cloud, Eigen::MatrixXf raster, Pose pose_est,
+        float angle_offset_max, float angle_offset_step,
+        float transl_offset_max, float transl_offset_step);
 
-  bool pose_initialized_;
-  bool slam_started_;
+    // Member variables
 
-  // Current odometry-reported locations.
-  Eigen::Vector2f current_odom_loc_;
-  float current_odom_angle_;
+    bool odom_initialized_;
+    int odom_counter_;
 
-  // Previous pose's odometry-reported locations
-  Eigen::Vector2f prev_pose_odom_loc_;
-  float prev_pose_odom_angle_;
+    bool pose_initialized_;
+    bool slam_started_;
 
-  // Previous pose's point cloud, relative to previous pose
-  std::vector<Eigen::Vector2f> prev_pose_point_cloud_;
+    // Current odometry-reported locations.
+    Eigen::Vector2f current_odom_loc_;
+    float current_odom_angle_;
 
-  // Map of the world that is being built, relative to the first pose
-  std::vector<Eigen::Vector2f> map_;
+    // Previous pose's odometry-reported locations
+    Eigen::Vector2f prev_pose_odom_loc_;
+    float prev_pose_odom_angle_;
 
-  // Ordered collection of previous poses, relative to the first pose
-  std::vector<Pose> prev_poses_;
+    // Previous pose's point cloud, relative to previous pose
+    std::vector<Eigen::Vector2f> prev_pose_point_cloud_;
 
- public:
-  bool last_pose_soft_;
- private:
-  Pose soft_pose_;
+    // Map of the world that is being built, relative to the first pose
+    std::vector<Eigen::Vector2f> map_;
+
+    // Ordered collection of previous poses, relative to the first pose
+    std::vector<Pose> prev_poses_;
+
+public:
+    bool last_pose_soft_;
+private:
+    Pose soft_pose_;
 
 };
 }  // namespace slam

@@ -8,7 +8,7 @@
 #define CAR_H
 
 class Car {
- public:
+public:
     // Constructor:
     explicit Car(double max_acceleration,
         double max_deceleration,
@@ -18,14 +18,14 @@ class Car {
         double del_length,
         double del_width,
         double safety_margin);
-    
+
     void drawBoundingBox(amrl_msgs::VisualizationMsg& local_viz_msg_);
 
     void calcPathMetrics(Path& path, const std::vector<Vector2f>& point_cloud);
 
     float timeOptimalController(float vel, float update_period, float free_path_length, Vector2f goal_point, bool is_backwards);
 
- private:
+private:
     double max_acceleration;
     double max_deceleration;
     double max_speed;
@@ -34,7 +34,7 @@ class Car {
     double del_length;
     double del_width;
     // calculateClearance(Path path)
-   
+
 
     // getRadiusInner
 

@@ -18,13 +18,11 @@ using std::vector;
 #define FRONTIER_H
 
 class Frontier {
- public:
+public:
     bool no_frontier_;
-    explicit Frontier() : no_frontier_(false) {
-        
-    }
-    
-    
+    explicit Frontier() : no_frontier_(false) {}
+
+
     Vector2f findFrontier(EvidenceGrid evidence_grid, Vector2f robot_loc) {//, amrl_msgs::VisualizationMsg& vis_msg) {
         std::cout << "<Frontier finder> Starting\n";
 
@@ -65,9 +63,9 @@ class Frontier {
             Eigen::Vector2i(2, -1),
         };
 
-        Eigen::Matrix<bool,-1, -1> visited = Eigen::Matrix<bool,-1,-1>::Constant(evidence_grid.num_x, evidence_grid.num_y, false);
+        Eigen::Matrix<bool, -1, -1> visited = Eigen::Matrix<bool, -1, -1>::Constant(evidence_grid.num_x, evidence_grid.num_y, false);
         std::queue<Vector2i> queue;
-        
+
         if (!(evidence_grid.evidence_grid_(grid_loc[0], grid_loc[1]) < .5)) {
             std::cout << "<Frontier finder> Starting loc is not open!\n";
             return evidence_grid.gridToPoint(grid_loc);
